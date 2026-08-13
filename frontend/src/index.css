@@ -1,0 +1,23 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600&display=swap");
+@import "tailwindcss";
+
+/*
+  Tokens de marca — ver BRAND_DESIGN.md.
+  Definidos con @theme (Tailwind v4) para generar utilidades como
+  bg-baby-pink, text-charcoal, font-display, etc.
+*/
+@theme {
+  --color-baby-pink: #f8c8dc;
+  --color-soft-white: #fff5f7;
+  --color-charcoal: #4a4a4a;
+  --color-champagne: #d4af37;
+
+  --font-display: "Playfair Display", serif;
+  --font-body: "Inter", sans-serif;
+}
+
+body {
+  background: var(--color-soft-white);
+  color: var(--color-charcoal);
+  font-family: var(--font-body);
+}

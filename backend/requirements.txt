@@ -1,0 +1,17 @@
+# Versiones verificadas contra Python 3.14 (wheels disponibles, sin compilar).
+fastapi==0.141.1
+uvicorn[standard]==0.52.3
+sqlalchemy[asyncio]==2.0.52
+asyncpg==0.31.0
+pyjwt==2.10.1
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-dateutil==2.9.0.post0
+httpx==0.28.1
+# Windows (y contenedores slim) no traen la base de datos IANA: zoneinfo la
+# necesita para resolver el timezone del salón.
+tzdata==2026.3
+
+# dev
+pytest==9.1.1
+pytest-asyncio==1.4.0
