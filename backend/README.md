@@ -24,8 +24,20 @@ El schema vive en `../supabase/migrations/`. Aplicarlo con el CLI de Supabase
 .venv/Scripts/python -m pytest
 ```
 
-Los tests de `test_availability.py` stubbean el acceso a base y cubren el
-algoritmo de slots. No requieren Postgres.
+Los tests stubbean el acceso a base (`test_availability.py`, `test_bookings.py`)
+o la sesión HTTP (`test_api.py`). No requieren Postgres — para probar contra
+una base real, ver `scripts/local_auth_stub.sql` y `scripts/seed_local.sql`
+(stub del schema `auth` de Supabase + datos de ejemplo para Postgres local).
+
+## Probar notificaciones sin un webhook real
+
+```bash
+.venv/Scripts/python scripts/fake_webhook_receiver.py   # escucha en :9099
+```
+
+Apuntar `NOTIFICATIONS_WEBHOOK_URL=http://localhost:9099/hook` en `.env` y
+loguea cada payload que reciba. Es una herramienta de desarrollo, no parte
+de la app.
 
 ## Cómo se evita el double-booking
 
