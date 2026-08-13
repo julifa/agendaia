@@ -179,7 +179,7 @@ export function BookingFlow() {
                 {new Intl.NumberFormat("es-AR", {
                   style: "currency",
                   currency: service.currency,
-                }).format(service.price)}
+                }).format(Number(service.price))}
               </p>
             </button>
           ))}

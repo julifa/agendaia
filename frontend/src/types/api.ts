@@ -13,7 +13,8 @@ export interface ApiService {
   description: string | null;
   duration_minutes: number;
   buffer_minutes: number;
-  price: number;
+  // Pydantic serializa Decimal como string para no perder precisión.
+  price: string;
   currency: string;
   is_active: boolean;
 }
@@ -35,13 +36,16 @@ export interface ApiBooking {
   id: string;
   salon_id: string;
   client_id: string | null;
+  // Resuelto server-side; null para invitados (ver guest_name).
+  client_name: string | null;
   guest_name: string | null;
   staff_id: string;
   service_id: string;
   start_time: string;
   end_time: string;
   duration_minutes: number;
-  price: number;
+  // Pydantic serializa Decimal como string para no perder precisión.
+  price: string;
   currency: string;
   status: AppointmentStatus;
   notes: string | null;
@@ -67,4 +71,56 @@ export interface ApiErrorBody {
   code: string;
   message: string;
   context: Record<string, unknown>;
+}
+
+// --- Administración -----------------------------------------------------
+
+export interface ApiStaff {
+  id: string;
+  salon_id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  role: "owner" | "staff" | "client";
+  is_active: boolean;
+}
+
+export interface ServiceInput {
+  name: string;
+  description?: string | null;
+  duration_minutes: number;
+  buffer_minutes?: number;
+  price: string;
+  currency?: string;
+}
+
+export interface ServiceUpdateInput {
+  name?: string;
+  description?: string | null;
+  duration_minutes?: number;
+  buffer_minutes?: number;
+  price?: string;
+  currency?: string;
+  is_active?: boolean;
+}
+
+export interface ApiScheduleBlock {
+  id: string;
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+
+export interface ScheduleBlockInput {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+
+export interface ApiTimeOff {
+  id: string;
+  staff_id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
 }

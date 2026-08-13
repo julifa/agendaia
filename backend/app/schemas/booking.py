@@ -69,6 +69,9 @@ class BookingOut(BaseModel):
     id: uuid.UUID
     salon_id: uuid.UUID
     client_id: uuid.UUID | None
+    #: Nombre del cliente registrado, resuelto server-side (join sobre
+    #: profiles). None para invitados: ahí el nombre está en `guest_name`.
+    client_name: str | None = None
     guest_name: str | None
     staff_id: uuid.UUID
     service_id: uuid.UUID

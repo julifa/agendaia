@@ -312,6 +312,7 @@ def make_appointment(**overrides):
     base = dict(
         id=uuid.uuid4(),
         salon_id=SALON_ID,
+        client_id=None,
         status=AppointmentStatus.pending,
         cancelled_at=None,
         cancellation_reason=None,

@@ -260,6 +260,23 @@ async def create_booking(
 
     await session.refresh(appointment)
     await notifications.notify("booking.created", appointment)
+    await attach_client_name(session, appointment)
+    return appointment
+
+
+async def attach_client_name(session: AsyncSession, appointment: Appointment) -> Appointment:
+    """Resuelve `client_name` desde `profiles` para armar el BookingOut.
+
+    El turno solo guarda `client_id`; el nombre para mostrar se busca acá en
+    vez de desnormalizarlo en la tabla, así no queda desactualizado si el
+    cliente cambia su nombre después.
+    """
+    if appointment.client_id is None:
+        appointment.client_name = None
+        return appointment
+
+    profile = await session.get(Profile, appointment.client_id)
+    appointment.client_name = profile.full_name if profile else None
     return appointment
 
 
@@ -333,6 +350,7 @@ async def get_booking(
     appointment = await session.get(Appointment, appointment_id)
     if appointment is None:
         raise ResourceNotFound("Turno inexistente", appointment_id=str(appointment_id))
+    await attach_client_name(session, appointment)
     return appointment
 
 
@@ -475,4 +493,24 @@ async def list_bookings(
         stmt = stmt.where(Appointment.status.in_(statuses))
 
     stmt = stmt.order_by(Appointment.start_time).limit(limit)
-    return list((await session.scalars(stmt)).all())
+    appointments = list((await session.scalars(stmt)).all())
+    await _attach_client_names_bulk(session, appointments)
+    return appointments
+
+
+async def _attach_client_names_bulk(
+    session: AsyncSession, appointments: list[Appointment]
+) -> None:
+    """Versión en lote de `attach_client_name`, para no hacer N queries al listar."""
+    client_ids = {a.client_id for a in appointments if a.client_id is not None}
+    if not client_ids:
+        for a in appointments:
+            a.client_name = None
+        return
+
+    rows = await session.execute(
+        select(Profile.id, Profile.full_name).where(Profile.id.in_(client_ids))
+    )
+    names = dict(rows.all())
+    for a in appointments:
+        a.client_name = names.get(a.client_id) if a.client_id else None

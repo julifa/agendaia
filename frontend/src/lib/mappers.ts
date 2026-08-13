@@ -14,7 +14,7 @@ export function toDisplayBooking(
     clientName: clientDisplayName,
     startTime: api.start_time,
     endTime: api.end_time,
-    price: api.price,
+    price: Number(api.price),
     currency: api.currency,
     status: api.status,
     notes: api.notes,
