@@ -30,8 +30,10 @@ export function BookingFlow() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<ApiSlot | null>(null);
 
-  const [guestName, setGuestName] = useState("");
+  const [guestFirstName, setGuestFirstName] = useState("");
+  const [guestLastName, setGuestLastName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
+  const guestFullName = `${guestFirstName.trim()} ${guestLastName.trim()}`.trim();
 
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export function BookingFlow() {
         salon_id: SALON_ID,
         service_id: selectedService.id,
         start_time: selectedSlot.start,
-        guest_name: user ? undefined : guestName,
+        guest_name: user ? undefined : guestFullName,
         guest_phone: user ? undefined : guestPhone || undefined,
       });
       setConfirmed(booking);
@@ -123,7 +125,8 @@ export function BookingFlow() {
   function reset() {
     setConfirmed(null);
     setSelectedSlot(null);
-    setGuestName("");
+    setGuestFirstName("");
+    setGuestLastName("");
     setGuestPhone("");
     void refreshSlots();
   }
@@ -140,7 +143,7 @@ export function BookingFlow() {
             confirmed,
             selectedService,
             assignedStaff,
-            user?.user_metadata?.full_name ?? (guestName || "Vos"),
+            user?.user_metadata?.full_name ?? (guestFullName || "Vos"),
           )}
         />
         <button
@@ -230,14 +233,24 @@ export function BookingFlow() {
         <section className="mt-8">
           <h2 className="font-display text-lg text-charcoal">3. Tus datos</h2>
           <div className="mt-3 flex flex-col gap-2">
-            <input
-              type="text"
-              placeholder="Nombre"
-              required
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Nombre"
+                required
+                value={guestFirstName}
+                onChange={(e) => setGuestFirstName(e.target.value)}
+                className="w-1/2 rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
+              />
+              <input
+                type="text"
+                placeholder="Apellido"
+                required
+                value={guestLastName}
+                onChange={(e) => setGuestLastName(e.target.value)}
+                className="w-1/2 rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
+              />
+            </div>
             <input
               type="tel"
               placeholder="Teléfono (opcional)"
@@ -254,7 +267,7 @@ export function BookingFlow() {
           {formError && <p className="mb-3 text-sm text-red-600">{formError}</p>}
           <button
             type="button"
-            disabled={submitting || (!user && !guestName.trim())}
+            disabled={submitting || (!user && (!guestFirstName.trim() || !guestLastName.trim()))}
             onClick={handleSubmit}
             className="w-full rounded-full bg-baby-pink py-3 text-sm font-medium text-charcoal
               transition-colors duration-200 hover:bg-champagne hover:text-white disabled:opacity-50"
