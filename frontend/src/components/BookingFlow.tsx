@@ -84,6 +84,45 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** Escapa texto para un campo de contenido ICS (RFC 5545 §3.3.11). */
+function icsEscape(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+}
+
+function icsDate(iso: string): string {
+  return new Date(iso).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+}
+
+/** Descarga un .ics con el turno, para sumarlo al calendario del cliente
+ * (Google/Apple/Outlook lo importan solo). No manda ningún email — es un
+ * archivo generado en el navegador, no requiere backend. */
+function downloadBookingIcs(booking: ApiBooking, serviceName: string) {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//MC Nails Studio//Turnos//ES",
+    "BEGIN:VEVENT",
+    `UID:${booking.id}@mcnailsstudio`,
+    `DTSTAMP:${icsDate(new Date().toISOString())}`,
+    `DTSTART:${icsDate(booking.start_time)}`,
+    `DTEND:${icsDate(booking.end_time)}`,
+    `SUMMARY:${icsEscape(`${serviceName} — MC Nails Studio`)}`,
+    `DESCRIPTION:${icsEscape("Tu turno en MC Nails Studio.")}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "turno-mc-nails-studio.ics";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function currentStepIndex(hasService: boolean, hasSlot: boolean): number {
   if (!hasService) return 0;
   if (!hasSlot) return 1;
@@ -165,7 +204,11 @@ export function BookingFlow() {
   const [guestFirstName, setGuestFirstName] = useState("");
   const [guestLastName, setGuestLastName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
   const guestFullName = `${guestFirstName.trim()} ${guestLastName.trim()}`.trim();
+  // Email para la descarga automática del .ics en la confirmación: del
+  // invitado si lo cargó, o el del profile si ya está logueado como cliente.
+  const calendarEmail = bookingAsGuest ? guestEmail.trim() : (user?.email ?? "");
 
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "mercadopago" | null>(null);
 
@@ -249,8 +292,16 @@ export function BookingFlow() {
         start_time: selectedSlot.start,
         guest_name: bookingAsGuest ? guestFullName : undefined,
         guest_phone: bookingAsGuest ? guestPhone.trim() : undefined,
+        guest_email: bookingAsGuest ? guestEmail.trim() || undefined : undefined,
         payment_method: paymentMethod,
       });
+
+      // Se dispara sola si cargó email — no manda nada por afuera, es un
+      // .ics generado en el navegador. Va antes del posible redirect a
+      // Mercado Pago para que también aplique a ese flujo.
+      if (calendarEmail) {
+        downloadBookingIcs(booking, selectedService.name);
+      }
 
       if (booking.payment_method === "mercadopago" && booking.mp_init_point) {
         // Redirect de página completa: Checkout Pro de Mercado Pago vive
@@ -283,6 +334,7 @@ export function BookingFlow() {
     setGuestFirstName("");
     setGuestLastName("");
     setGuestPhone("");
+    setGuestEmail("");
     void refreshSlots();
   }
 
@@ -380,6 +432,11 @@ export function BookingFlow() {
           <p className="mt-4 text-center text-sm text-red-600">
             Tu turno quedó reservado, pero no pudimos generar el link de pago. Te vamos a
             contactar para coordinar la seña.
+          </p>
+        )}
+        {calendarEmail && (
+          <p className="mt-4 text-center text-sm text-charcoal/55">
+            Te descargamos un archivo para sumar el turno a tu calendario.
           </p>
         )}
 
@@ -705,6 +762,13 @@ export function BookingFlow() {
                   required
                   value={guestPhone}
                   onChange={(e) => setGuestPhone(e.target.value)}
+                  className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                />
+                <input
+                  type="email"
+                  placeholder="Email (opcional — para sumarlo a tu calendario)"
+                  value={guestEmail}
+                  onChange={(e) => setGuestEmail(e.target.value)}
                   className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
                 />
               </div>

@@ -31,6 +31,10 @@ class BookingCreate(BaseModel):
     client_id: uuid.UUID | None = None
     guest_name: str | None = Field(default=None, max_length=120)
     guest_phone: str | None = Field(default=None, max_length=40)
+    #: Opcional. Si viene, la confirmación ofrece sumar el turno al
+    #: calendario del invitado. Sin validación de formato estricta (misma
+    #: laxitud que guest_phone) — igual lo tipea el usuario en un <input>.
+    guest_email: str | None = Field(default=None, max_length=255)
     notes: str | None = Field(default=None, max_length=1000)
     payment_method: PaymentMethod | None = None
 
@@ -74,6 +78,7 @@ class BookingOut(BaseModel):
     #: profiles). None para invitados: ahí el nombre está en `guest_name`.
     client_name: str | None = None
     guest_name: str | None
+    guest_email: str | None = None
     staff_id: uuid.UUID
     service_id: uuid.UUID
     start_time: dt.datetime

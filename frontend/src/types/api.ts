@@ -42,6 +42,7 @@ export interface ApiBooking {
   // Resuelto server-side; null para invitados (ver guest_name).
   client_name: string | null;
   guest_name: string | null;
+  guest_email: string | null;
   staff_id: string;
   service_id: string;
   start_time: string;

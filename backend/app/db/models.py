@@ -206,6 +206,8 @@ class Appointment(Base):
     client_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True))
     guest_name: Mapped[str | None] = mapped_column(Text)
     guest_phone: Mapped[str | None] = mapped_column(Text)
+    #: Solo para reservas de invitado, ver 20260814150000_guest_email.sql.
+    guest_email: Mapped[str | None] = mapped_column(Text)
     staff_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
     service_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
     start_time: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))

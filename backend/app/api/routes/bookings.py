@@ -115,17 +115,21 @@ async def create_booking(
             raise ResourceNotFound(
                 "Se requiere un número de WhatsApp para reservar como invitado"
             )
-        client_id, guest_name, guest_phone, created_by = (
+        client_id, guest_name, guest_phone, guest_email, created_by = (
             None,
             payload.guest_name,
             payload.guest_phone,
+            payload.guest_email,
             None,
         )
     elif profile.role is UserRole.client:
         if payload.salon_id != profile.salon_id:
             raise PermissionDenied("Este salón no corresponde a tu perfil")
-        client_id, guest_name, guest_phone, created_by = (
+        # El cliente registrado ya tiene su email en el profile: no hace
+        # falta pedirlo ni guardarlo de nuevo en el turno.
+        client_id, guest_name, guest_phone, guest_email, created_by = (
             profile.id,
+            None,
             None,
             None,
             profile.id,
@@ -133,10 +137,11 @@ async def create_booking(
     else:  # owner / staff cargando el turno
         if payload.salon_id != profile.salon_id:
             raise PermissionDenied("No podés cargar turnos para otro salón")
-        client_id, guest_name, guest_phone, created_by = (
+        client_id, guest_name, guest_phone, guest_email, created_by = (
             payload.client_id,
             payload.guest_name,
             payload.guest_phone,
+            payload.guest_email,
             profile.id,
         )
 
@@ -150,6 +155,7 @@ async def create_booking(
             client_id=client_id,
             guest_name=guest_name,
             guest_phone=guest_phone,
+            guest_email=guest_email,
             notes=payload.notes,
             created_by=created_by,
             payment_method=payload.payment_method,

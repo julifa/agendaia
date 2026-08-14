@@ -9,6 +9,7 @@ function makeApiBooking(overrides: Partial<ApiBooking> = {}): ApiBooking {
     client_id: null,
     client_name: null,
     guest_name: "Julieta",
+    guest_email: null,
     staff_id: "staff-1",
     service_id: "service-1",
     start_time: "2026-09-01T14:00:00Z",

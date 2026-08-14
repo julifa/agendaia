@@ -97,6 +97,7 @@ class BookingRequest:
     client_id: uuid.UUID | None = None
     guest_name: str | None = None
     guest_phone: str | None = None
+    guest_email: str | None = None
     notes: str | None = None
     created_by: uuid.UUID | None = None
     #: Confirmar de una en vez de dejar en 'pending' (reservas cargadas por el salón).
@@ -240,6 +241,7 @@ async def create_booking(
         client_id=request.client_id,
         guest_name=request.guest_name,
         guest_phone=request.guest_phone,
+        guest_email=request.guest_email,
         staff_id=staff_id,
         service_id=service.id,
         start_time=interval.start,
