@@ -4,6 +4,10 @@ uvicorn[standard]==0.52.3
 sqlalchemy[asyncio]==2.0.52
 asyncpg==0.31.0
 pyjwt==2.10.1
+# Supabase firma los tokens de sesión con claves asimétricas (ES256) por
+# default en proyectos nuevos; pyjwt necesita `cryptography` para verificar
+# ese algoritmo (HS256 no la requiere, pero ES256/RS256 sí).
+cryptography==50.0.0
 pydantic==2.13.4
 pydantic-settings==2.15.0
 python-dateutil==2.9.0.post0
