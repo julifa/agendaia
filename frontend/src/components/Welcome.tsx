@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Divider } from "./Divider";
+import { InstagramIcon } from "./InstagramIcon";
 import { Monogram } from "./Logo";
 
 /**
@@ -79,6 +80,17 @@ export function Welcome({ onStart }: { onStart: () => void }) {
             />
           </svg>
         </motion.button>
+
+        <a
+          href="https://www.instagram.com/mcstudiodebelleza"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-6 flex items-center gap-1.5 text-xs font-medium text-charcoal/45
+            underline-offset-4 transition-colors hover:text-champagne hover:underline"
+        >
+          <InstagramIcon className="h-3.5 w-3.5" />
+          Mirá los diseños en Instagram
+        </a>
       </motion.div>
     </section>
   );

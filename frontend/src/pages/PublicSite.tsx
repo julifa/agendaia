@@ -7,6 +7,7 @@ import { LoginPanel } from "../components/LoginPanel";
 import { BookingFlow } from "../components/BookingFlow";
 import { DecorBackground } from "../components/DecorBackground";
 import { Divider } from "../components/Divider";
+import { InstagramIcon } from "../components/InstagramIcon";
 import { Logo, Monogram } from "../components/Logo";
 import { Marquee } from "../components/Marquee";
 import { PolishSwatches } from "../components/PolishSwatches";
@@ -140,8 +141,20 @@ export function PublicSite() {
                 <BookingFlow />
               </div>
 
-              <footer className="mt-10 flex flex-col items-center gap-2">
+              <footer className="mt-10 flex flex-col items-center gap-3">
                 <Monogram className="h-7 w-7 opacity-60" />
+
+                <a
+                  href="https://www.instagram.com/mcstudiodebelleza"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs font-medium text-charcoal/50
+                    underline-offset-4 transition-colors hover:text-champagne hover:underline"
+                >
+                  <InstagramIcon className="h-3.5 w-3.5" />
+                  Mirá los diseños en Instagram
+                </a>
+
                 <p className="text-center text-xs tracking-wide text-charcoal/35">
                   MC NAILS STUDIO · hecho con cariño para tus uñas
                 </p>
