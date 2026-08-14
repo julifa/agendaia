@@ -162,6 +162,33 @@ def test_invitado_puede_reservar_sin_sesion(client, monkeypatch):
         assert request.client_id is None
         assert request.guest_name == "Julieta"
         assert request.guest_phone == "+5491100000000"
+        assert request.guest_email == "julieta@example.com"
+        return make_appointment(guest_name="Julieta")
+
+    monkeypatch.setattr(bookings_service, "create_booking", fake_create)
+
+    res = client.post(
+        "/api/v1/bookings",
+        json={
+            "salon_id": str(SALON_ID),
+            "service_id": str(SERVICE_ID),
+            "start_time": START.isoformat(),
+            "guest_name": "Julieta",
+            "guest_phone": "+5491100000000",
+            "guest_email": "julieta@example.com",
+        },
+    )
+    assert res.status_code == 201
+    assert res.json()["status"] == "pending"
+
+
+def test_invitado_puede_reservar_sin_email(client, monkeypatch):
+    """El email es opcional — a diferencia del WhatsApp, no debe bloquear la
+    reserva de invitado si no lo carga."""
+    as_anonymous()
+
+    async def fake_create(session, request, now=None):
+        assert request.guest_email is None
         return make_appointment(guest_name="Julieta")
 
     monkeypatch.setattr(bookings_service, "create_booking", fake_create)
@@ -177,7 +204,6 @@ def test_invitado_puede_reservar_sin_sesion(client, monkeypatch):
         },
     )
     assert res.status_code == 201
-    assert res.json()["status"] == "pending"
 
 
 def test_invitado_sin_whatsapp_no_puede_reservar(client):
