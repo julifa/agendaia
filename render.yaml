@@ -1,0 +1,36 @@
+# Blueprint de Render para el backend (FastAPI). Ver DEPLOYMENT.md.
+#
+# Los `sync: false` son secretos/config que Render pide a mano en el
+# dashboard la primera vez (Blueprint no los versiona en el repo). El resto
+# son valores no sensibles con default razonable para producción.
+services:
+  - type: web
+    name: agendaia-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: NOTIFICATIONS_WEBHOOK_URL
+        sync: false
+      - key: MERCADOPAGO_ACCESS_TOKEN
+        sync: false
+      - key: BOOKING_DEPOSIT_AMOUNT
+        value: "8500"
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: BACKEND_PUBLIC_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: DB_ECHO
+        value: "false"

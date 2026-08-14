@@ -48,9 +48,12 @@ Variables de entorno (ver `backend/.env.example`):
 | `NOTIFICATIONS_WEBHOOK_URL` | endpoint de Zapier/Make/n8n/Cloud Function que reciba los eventos de turno |
 | `CORS_ORIGINS` | `["https://tu-dominio-frontend"]` |
 
-Targets sugeridos (cualquiera sirve con un `Dockerfile` estándar): Fly.io,
-Render, Railway. Health check del contenedor: `GET /health` (ya lo usa el
-`HEALTHCHECK` del Dockerfile).
+Hay un Blueprint de Render (`render.yaml` en la raíz del repo) que define el
+servicio a partir de `backend/Dockerfile` tal cual — en Render: New ->
+Blueprint, conectar este repo, y va a pedir los valores de la tabla de
+arriba (marcados `sync: false`) por dashboard. Cualquier otro target con
+`Dockerfile` estándar sirve igual (Fly.io, Railway). Health check del
+contenedor: `GET /health` (ya lo usa el `HEALTHCHECK` del Dockerfile).
 
 ## 3. Frontend (React/Vite)
 
