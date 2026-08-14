@@ -6,8 +6,12 @@ import { useProfile } from "../hooks/useProfile";
 import { LoginPanel } from "../components/LoginPanel";
 import { BookingFlow } from "../components/BookingFlow";
 import { DecorBackground } from "../components/DecorBackground";
+import { Divider } from "../components/Divider";
+import { Logo, Monogram } from "../components/Logo";
 import { Marquee } from "../components/Marquee";
 import { PolishSwatches } from "../components/PolishSwatches";
+import { Sparkle } from "../components/Sparkle";
+import { Welcome } from "../components/Welcome";
 
 function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
   const { user, signOut, loading } = useAuth();
@@ -17,9 +21,7 @@ function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
   return (
     <div className="sticky top-0 z-20 border-b border-charcoal/8 bg-soft-white/80 backdrop-blur-lg">
       <div className="mx-auto flex max-w-md items-center justify-between px-5 py-3 sm:px-6">
-        <span className="font-display text-base font-semibold tracking-tight text-charcoal">
-          MC Nails Studio
-        </span>
+        <Logo />
 
         {!loading && (
           <div className="flex items-center gap-3 text-xs">
@@ -61,8 +63,12 @@ function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
 function Hero() {
   return (
     <div className="mx-auto max-w-md px-5 pb-8 pt-10 text-center sm:px-6">
-      <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-champagne">
-        Estudio de manicura · NYC style
+      <Monogram className="mx-auto h-11 w-11 opacity-90" />
+
+      <p className="mt-4 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.3em] text-champagne">
+        <Sparkle className="h-3 w-3" />
+        MC Nails Studio
+        <Sparkle className="h-3 w-3" />
       </p>
       <h1 className="mt-3 font-display text-[2.6rem] leading-[0.98] tracking-tight text-charcoal">
         Uñas lindas,
@@ -81,41 +87,67 @@ function Hero() {
 
 export function PublicSite() {
   const [showLogin, setShowLogin] = useState(false);
+  const [entered, setEntered] = useState(false);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-soft-white">
       <DecorBackground />
 
       <TopBar onLoginClick={() => setShowLogin(true)} />
-      <Hero />
-      <Marquee />
 
-      <div className="mx-auto max-w-md px-5 pb-16 pt-8 sm:px-6">
-        <AnimatePresence>
-          {showLogin && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              className="mb-6 overflow-hidden"
-            >
-              <LoginPanel onClose={() => setShowLogin(false)} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+      <AnimatePresence mode="wait">
+        {!entered ? (
+          <motion.div
+            key="welcome"
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.35, ease: "easeIn" }}
+          >
+            <Welcome onStart={() => setEntered(true)} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="booking"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+          >
+            <Hero />
+            <Marquee />
 
-        <div
-          className="rounded-[2rem] border border-white/60 bg-white/70 p-6 backdrop-blur-xl sm:p-8"
-          style={{ boxShadow: "var(--shadow-soft)" }}
-        >
-          <BookingFlow />
-        </div>
+            <div className="mx-auto max-w-md px-5 pb-16 pt-8 sm:px-6">
+              <AnimatePresence>
+                {showLogin && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className="mb-6 overflow-hidden"
+                  >
+                    <LoginPanel onClose={() => setShowLogin(false)} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-        <p className="mt-8 text-center text-xs text-charcoal/35">
-          MC Nails Studio · hecho con cariño para tus uñas
-        </p>
-      </div>
+              <Divider className="mb-6" />
+
+              <div
+                className="rounded-[2rem] border border-white/60 bg-white/70 p-6 backdrop-blur-xl sm:p-8"
+                style={{ boxShadow: "var(--shadow-soft)" }}
+              >
+                <BookingFlow />
+              </div>
+
+              <footer className="mt-10 flex flex-col items-center gap-2">
+                <Monogram className="h-7 w-7 opacity-60" />
+                <p className="text-center text-xs tracking-wide text-charcoal/35">
+                  MC NAILS STUDIO · hecho con cariño para tus uñas
+                </p>
+              </footer>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
