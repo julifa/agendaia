@@ -72,9 +72,8 @@ export function BookingCard({
 
   return (
     <article
-      className={`group relative overflow-hidden rounded-2xl border border-baby-pink/30
-        bg-white/60 p-6 shadow-sm backdrop-blur-md transition-all duration-300
-        hover:-translate-y-0.5 hover:shadow-lg hover:shadow-baby-pink/20 ${className}`}
+      className={`relative overflow-hidden rounded-2xl border border-charcoal/6 bg-white p-6 transition-transform duration-300 hover:-translate-y-0.5 ${className}`}
+      style={{ boxShadow: "var(--shadow-soft)" }}
     >
       {/* Filo superior en champagne: el único acento "de lujo" de la tarjeta. */}
       <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-champagne/0 via-champagne to-champagne/0" />
@@ -84,7 +83,7 @@ export function BookingCard({
           <h3 className="font-display text-xl font-semibold leading-tight text-charcoal">
             {booking.serviceName}
           </h3>
-          <p className="mt-1 text-sm text-charcoal/60">
+          <p className="mt-1 text-sm text-charcoal/55">
             con {booking.staffName}
           </p>
         </div>
@@ -96,17 +95,17 @@ export function BookingCard({
         </span>
       </header>
 
-      <div className="mt-5 flex items-center gap-3 border-y border-charcoal/10 py-4 text-sm text-charcoal/80">
+      <div className="mt-5 flex items-center gap-3 border-y border-charcoal/8 py-4 text-sm text-charcoal/80">
         <div className="flex-1">
           <p className="font-display text-base text-charcoal">
             {capitalize(dateFormatter.format(start))}
           </p>
-          <p className="text-charcoal/60">
+          <p className="text-charcoal/55">
             {timeFormatter.format(start)} – {timeFormatter.format(end)}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs uppercase tracking-wider text-charcoal/50">
+          <p className="text-[11px] uppercase tracking-wider text-charcoal/40">
             Cliente
           </p>
           <p className="text-charcoal">{booking.clientName}</p>
@@ -124,8 +123,8 @@ export function BookingCard({
               <button
                 type="button"
                 onClick={() => onCancel(booking.id)}
-                className="rounded-full border border-charcoal/20 px-4 py-1.5 text-sm
-                  text-charcoal/70 transition-colors duration-200 hover:border-charcoal/40 hover:text-charcoal"
+                className="rounded-full border border-charcoal/15 px-4 py-1.5 text-sm
+                  text-charcoal/60 transition-colors duration-200 hover:border-charcoal/35 hover:text-charcoal"
               >
                 Cancelar
               </button>
@@ -134,8 +133,8 @@ export function BookingCard({
               <button
                 type="button"
                 onClick={() => onConfirm(booking.id)}
-                className="rounded-full bg-baby-pink px-4 py-1.5 text-sm font-medium
-                  text-charcoal transition-colors duration-200 hover:bg-champagne hover:text-white"
+                className="rounded-full bg-champagne px-4 py-1.5 text-sm font-medium
+                  text-white transition-opacity duration-200 hover:opacity-90"
               >
                 Confirmar
               </button>

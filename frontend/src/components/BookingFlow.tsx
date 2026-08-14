@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { apiGet, apiPost, ApiError } from "../lib/api";
 import { toDisplayBooking } from "../lib/mappers";
 import { useAuth } from "../hooks/useAuth";
@@ -11,9 +12,90 @@ const timeFormatter = new Intl.DateTimeFormat("es-AR", {
   hour: "2-digit",
   minute: "2-digit",
 });
+const weekdayFormatter = new Intl.DateTimeFormat("es-AR", { weekday: "short" });
+const monthFormatter = new Intl.DateTimeFormat("es-AR", { month: "short" });
+
+/** Fecha local en formato YYYY-MM-DD. `toISOString()` convierte a UTC
+ * primero, así que cerca de medianoche en Argentina (UTC-3) devolvería el
+ * día siguiente; esto arma la fecha a partir de los componentes locales. */
+function toLocalISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 function todayISODate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalISODate(new Date());
+}
+
+function nextDays(count: number) {
+  const today = new Date();
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    return {
+      iso: toLocalISODate(d),
+      weekday: weekdayFormatter.format(d).replace(".", ""),
+      day: d.getDate(),
+      month: monthFormatter.format(d).replace(".", ""),
+      isToday: i === 0,
+    };
+  });
+}
+
+function groupSlots(slots: ApiSlot[]) {
+  const groups: { label: string; items: ApiSlot[] }[] = [
+    { label: "Mañana", items: [] },
+    { label: "Tarde", items: [] },
+    { label: "Noche", items: [] },
+  ];
+  for (const slot of slots) {
+    const hour = new Date(slot.start).getHours();
+    const bucket = hour < 13 ? 0 : hour < 19 ? 1 : 2;
+    groups[bucket].items.push(slot);
+  }
+  return groups.filter((g) => g.items.length > 0);
+}
+
+const STEPS = [
+  { label: "Servicio", heading: "¿Qué te gustaría hacerte?" },
+  { label: "Horario", heading: "¿Cuándo te queda bien?" },
+  { label: "Confirmar", heading: "Contanos quién sos" },
+];
+
+function currentStepIndex(hasService: boolean, hasSlot: boolean): number {
+  if (!hasService) return 0;
+  if (!hasSlot) return 1;
+  return 2;
+}
+
+function ProgressTrack({ step }: { step: number }) {
+  const progress = ((step + 1) / STEPS.length) * 100;
+  return (
+    <div className="mb-7">
+      <div className="h-1 overflow-hidden rounded-full bg-charcoal/8">
+        <motion.div
+          className="h-full rounded-full bg-champagne"
+          initial={false}
+          animate={{ width: `${progress}%` }}
+          transition={{ type: "spring", stiffness: 300, damping: 32 }}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        <span className="text-[11px] font-medium uppercase tracking-[0.15em] text-champagne">
+          Paso {step + 1} de {STEPS.length}
+        </span>
+        <span className="text-[11px] text-charcoal/40">{STEPS[step].label}</span>
+      </div>
+    </div>
+  );
+}
+
+function SectionHeading({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="font-display text-[1.35rem] leading-snug text-charcoal">{children}</h2>
+  );
 }
 
 export function BookingFlow() {
@@ -25,6 +107,7 @@ export function BookingFlow() {
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [staffForService, setStaffForService] = useState<ApiPublicStaff[]>([]);
 
+  const days = useMemo(() => nextDays(14), []);
   const [date, setDate] = useState(todayISODate());
   const [slots, setSlots] = useState<ApiSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -69,11 +152,7 @@ export function BookingFlow() {
     }
     setLoadingSlots(true);
     setSelectedSlot(null);
-    const params = new URLSearchParams({
-      salon_id: SALON_ID,
-      service_id: selectedServiceId,
-      date,
-    });
+    const params = new URLSearchParams({ salon_id: SALON_ID, service_id: selectedServiceId, date });
     apiGet<ApiAvailability>(`/availability?${params}`)
       .then((res) => setSlots(res.slots))
       .catch(() => setSlots([]))
@@ -83,11 +162,7 @@ export function BookingFlow() {
   async function refreshSlots() {
     if (!selectedServiceId) return;
     setLoadingSlots(true);
-    const params = new URLSearchParams({
-      salon_id: SALON_ID,
-      service_id: selectedServiceId,
-      date,
-    });
+    const params = new URLSearchParams({ salon_id: SALON_ID, service_id: selectedServiceId, date });
     try {
       const res = await apiGet<ApiAvailability>(`/availability?${params}`);
       setSlots(res.slots);
@@ -134,10 +209,36 @@ export function BookingFlow() {
   if (confirmed && selectedService) {
     const assignedStaff = staffForService.find((s) => s.id === confirmed.staff_id);
     return (
-      <div className="mx-auto max-w-md">
-        <p className="mb-4 text-center font-display text-lg text-champagne">
-          ¡Turno confirmado!
-        </p>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      >
+        <div className="mb-7 flex flex-col items-center gap-3">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
+            className="relative flex h-16 w-16 items-center justify-center rounded-full bg-champagne/12"
+          >
+            <div className="absolute inset-0 animate-ping rounded-full bg-champagne/15" />
+            <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none">
+              <path
+                d="M5 13l4 4L19 7"
+                stroke="var(--color-champagne)"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="check-path"
+              />
+            </svg>
+          </motion.div>
+          <div className="text-center">
+            <p className="font-display text-xl text-charcoal">¡Todo listo!</p>
+            <p className="mt-0.5 text-sm text-charcoal/50">Te esperamos con muchas ganas.</p>
+          </div>
+        </div>
+
         <BookingCard
           booking={toDisplayBooking(
             confirmed,
@@ -146,136 +247,259 @@ export function BookingFlow() {
             user?.user_metadata?.full_name ?? (guestFullName || "Vos"),
           )}
         />
-        <button
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           type="button"
           onClick={reset}
-          className="mt-6 w-full rounded-full border border-charcoal/20 py-2 text-sm text-charcoal/70
-            transition-colors hover:border-charcoal/40 hover:text-charcoal"
+          className="mt-5 w-full rounded-full border border-charcoal/15 py-2.5 text-sm text-charcoal/60
+            transition-colors hover:border-charcoal/30 hover:text-charcoal"
         >
           Reservar otro turno
-        </button>
-      </div>
+        </motion.button>
+      </motion.div>
     );
   }
 
+  const step = currentStepIndex(!!selectedService, !!selectedSlot);
+
   return (
-    <div className="mx-auto max-w-md">
+    <div>
+      <ProgressTrack step={step} />
+
       {/* Paso 1: servicio */}
       <section>
-        <h2 className="font-display text-lg text-charcoal">1. Elegí un servicio</h2>
+        <SectionHeading>{STEPS[0].heading}</SectionHeading>
         {servicesError && <p className="mt-2 text-sm text-red-600">{servicesError}</p>}
-        <div className="mt-3 flex flex-col gap-2">
-          {services.map((service) => (
-            <button
-              key={service.id}
-              type="button"
-              onClick={() => setSelectedServiceId(service.id)}
-              className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
-                service.id === selectedServiceId
-                  ? "border-champagne bg-champagne/10"
-                  : "border-charcoal/15 bg-white/60 hover:border-baby-pink"
-              }`}
-            >
-              <p className="font-display text-charcoal">{service.name}</p>
-              <p className="text-sm text-charcoal/60">
-                {service.duration_minutes} min ·{" "}
-                {new Intl.NumberFormat("es-AR", {
-                  style: "currency",
-                  currency: service.currency,
-                }).format(Number(service.price))}
-              </p>
-            </button>
-          ))}
+        <div className="mt-4 flex flex-col gap-2">
+          {services.map((service) => {
+            const isSelected = service.id === selectedServiceId;
+            return (
+              <motion.button
+                key={service.id}
+                type="button"
+                whileTap={{ scale: 0.99 }}
+                onClick={() => setSelectedServiceId(service.id)}
+                className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-2xl border py-3.5 pl-4 pr-3.5 text-left transition-colors ${
+                  isSelected
+                    ? "border-champagne/40 bg-champagne/[0.06]"
+                    : "border-charcoal/8 bg-white hover:border-baby-pink"
+                }`}
+              >
+                <motion.span
+                  animate={{ opacity: isSelected ? 1 : 0 }}
+                  className="absolute inset-y-0 left-0 w-[3px] bg-champagne"
+                />
+                <div>
+                  <p className="font-display text-[1.05rem] text-charcoal">{service.name}</p>
+                  <p className="mt-0.5 text-[13px] text-charcoal/45">
+                    {service.duration_minutes} min ·{" "}
+                    {new Intl.NumberFormat("es-AR", {
+                      style: "currency",
+                      currency: service.currency,
+                    }).format(Number(service.price))}
+                  </p>
+                </div>
+                <div
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                    isSelected ? "border-champagne bg-champagne" : "border-charcoal/15"
+                  }`}
+                >
+                  <AnimatePresence>
+                    {isSelected && (
+                      <motion.svg
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0, opacity: 0 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                        viewBox="0 0 24 24"
+                        className="h-3.5 w-3.5 text-white"
+                        fill="none"
+                      >
+                        <path
+                          d="M5 13l4 4L19 7"
+                          stroke="currentColor"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </motion.svg>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.button>
+            );
+          })}
         </div>
       </section>
 
       {/* Paso 2: fecha y horario */}
-      {selectedService && (
-        <section className="mt-8">
-          <h2 className="font-display text-lg text-charcoal">2. Elegí día y horario</h2>
-          <input
-            type="date"
-            value={date}
-            min={todayISODate()}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-3 rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
-          />
-
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {loadingSlots && (
-              <p className="col-span-3 text-sm text-charcoal/50">Buscando horarios...</p>
-            )}
-            {!loadingSlots && slots.length === 0 && (
-              <p className="col-span-3 text-sm text-charcoal/50">
-                No hay turnos disponibles ese día.
-              </p>
-            )}
-            {slots.map((slot) => (
-              <button
-                key={slot.start}
-                type="button"
-                onClick={() => setSelectedSlot(slot)}
-                className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
-                  slot.start === selectedSlot?.start
-                    ? "border-champagne bg-champagne text-white"
-                    : "border-charcoal/15 bg-white/60 text-charcoal hover:border-baby-pink"
-                }`}
-              >
-                {timeFormatter.format(new Date(slot.start))}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Paso 3: datos del invitado (si no hay sesión) */}
-      {selectedSlot && !user && (
-        <section className="mt-8">
-          <h2 className="font-display text-lg text-charcoal">3. Tus datos</h2>
-          <div className="mt-3 flex flex-col gap-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Nombre"
-                required
-                value={guestFirstName}
-                onChange={(e) => setGuestFirstName(e.target.value)}
-                className="w-1/2 rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
-              />
-              <input
-                type="text"
-                placeholder="Apellido"
-                required
-                value={guestLastName}
-                onChange={(e) => setGuestLastName(e.target.value)}
-                className="w-1/2 rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
-              />
-            </div>
-            <input
-              type="tel"
-              placeholder="Teléfono (opcional)"
-              value={guestPhone}
-              onChange={(e) => setGuestPhone(e.target.value)}
-              className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
-            />
-          </div>
-        </section>
-      )}
-
-      {selectedSlot && (
-        <section className="mt-8">
-          {formError && <p className="mb-3 text-sm text-red-600">{formError}</p>}
-          <button
-            type="button"
-            disabled={submitting || (!user && (!guestFirstName.trim() || !guestLastName.trim()))}
-            onClick={handleSubmit}
-            className="w-full rounded-full bg-baby-pink py-3 text-sm font-medium text-charcoal
-              transition-colors duration-200 hover:bg-champagne hover:text-white disabled:opacity-50"
+      <AnimatePresence>
+        {selectedService && (
+          <motion.section
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mt-8 border-t border-charcoal/8 pt-7"
           >
-            {submitting ? "Reservando..." : "Confirmar reserva"}
-          </button>
-        </section>
-      )}
+            <SectionHeading>{STEPS[1].heading}</SectionHeading>
+
+            <div className="mt-4 -mx-1 flex gap-1.5 overflow-x-auto rounded-2xl bg-charcoal/[0.03] p-1.5">
+              {days.map((d) => {
+                const isActive = d.iso === date;
+                return (
+                  <button
+                    key={d.iso}
+                    type="button"
+                    onClick={() => setDate(d.iso)}
+                    className="relative shrink-0 rounded-xl px-3 py-2 text-center"
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="date-pill"
+                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                        className="absolute inset-0 rounded-xl bg-white"
+                        style={{ boxShadow: "var(--shadow-soft)" }}
+                      />
+                    )}
+                    <div className="relative flex flex-col items-center">
+                      <span
+                        className={`text-[10px] font-medium uppercase ${isActive ? "text-champagne" : "text-charcoal/40"}`}
+                      >
+                        {d.isToday ? "Hoy" : d.weekday}
+                      </span>
+                      <span
+                        className={`font-display text-lg ${isActive ? "text-charcoal" : "text-charcoal/70"}`}
+                      >
+                        {d.day}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-5">
+              {loadingSlots && (
+                <div className="flex gap-2">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-9 w-16 animate-pulse rounded-xl bg-charcoal/8" />
+                  ))}
+                </div>
+              )}
+              {!loadingSlots && slots.length === 0 && (
+                <p className="text-sm text-charcoal/45">
+                  No hay turnos disponibles ese día — probá con otra fecha.
+                </p>
+              )}
+              {!loadingSlots &&
+                groupSlots(slots).map((group) => (
+                  <div key={group.label} className="mb-4 last:mb-0">
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-charcoal/35">
+                      {group.label}
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {group.items.map((slot, i) => {
+                        const isActive = slot.start === selectedSlot?.start;
+                        return (
+                          <motion.button
+                            key={slot.start}
+                            type="button"
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.025 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setSelectedSlot(slot)}
+                            className="relative rounded-xl text-sm"
+                          >
+                            {isActive && (
+                              <motion.div
+                                layoutId="slot-pill"
+                                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                className="absolute inset-0 rounded-xl bg-champagne"
+                              />
+                            )}
+                            <span
+                              className={`relative block rounded-xl border px-2 py-2 text-center tabular-nums ${
+                                isActive
+                                  ? "border-transparent font-medium text-white"
+                                  : "border-charcoal/10 text-charcoal/80"
+                              }`}
+                            >
+                              {timeFormatter.format(new Date(slot.start))}
+                            </span>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      {/* Paso 3: datos del invitado (si no hay sesión) + confirmación */}
+      <AnimatePresence>
+        {selectedSlot && (
+          <motion.section
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mt-8 border-t border-charcoal/8 pt-7"
+          >
+            {!user && (
+              <>
+                <SectionHeading>{STEPS[2].heading}</SectionHeading>
+                <div className="mt-4 flex flex-col gap-2.5">
+                  <div className="flex gap-2.5">
+                    <input
+                      type="text"
+                      placeholder="Nombre"
+                      required
+                      value={guestFirstName}
+                      onChange={(e) => setGuestFirstName(e.target.value)}
+                      className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Apellido"
+                      required
+                      value={guestLastName}
+                      onChange={(e) => setGuestLastName(e.target.value)}
+                      className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                    />
+                  </div>
+                  <input
+                    type="tel"
+                    placeholder="Teléfono (opcional)"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
+                    className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                  />
+                </div>
+              </>
+            )}
+
+            {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
+
+            <motion.button
+              whileHover={{ scale: submitting ? 1 : 1.015 }}
+              whileTap={{ scale: submitting ? 1 : 0.98 }}
+              type="button"
+              disabled={submitting || (!user && (!guestFirstName.trim() || !guestLastName.trim()))}
+              onClick={handleSubmit}
+              className="mt-5 w-full rounded-full bg-champagne py-3.5 text-sm font-medium tracking-wide text-white
+                transition-opacity disabled:opacity-40"
+              style={{ boxShadow: submitting ? "none" : "var(--shadow-glow)" }}
+            >
+              {submitting ? "Reservando..." : "Confirmar reserva"}
+            </motion.button>
+          </motion.section>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

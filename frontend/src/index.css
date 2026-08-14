@@ -4,7 +4,7 @@
 /*
   Tokens de marca — ver BRAND_DESIGN.md.
   Definidos con @theme (Tailwind v4) para generar utilidades como
-  bg-baby-pink, text-charcoal, font-display, etc.
+  bg-baby-pink, text-charcoal, font-display, shadow-soft, etc.
 */
 @theme {
   --color-baby-pink: #f8c8dc;
@@ -14,10 +14,60 @@
 
   --font-display: "Playfair Display", serif;
   --font-body: "Inter", sans-serif;
+
+  /* Sombras con tinte cálido en vez del gris default: es lo que hace que
+     una superficie se sienta "de marca" y no un panel de admin genérico. */
+  --shadow-soft: 0 1px 2px rgba(74, 74, 74, 0.04), 0 24px 48px -20px rgba(212, 175, 55, 0.22);
+  --shadow-glow: 0 8px 20px -6px rgba(212, 175, 55, 0.45);
 }
 
 body {
-  background: var(--color-soft-white);
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(248, 200, 220, 0.25), transparent),
+    var(--color-soft-white);
   color: var(--color-charcoal);
   font-family: var(--font-body);
+}
+
+/* Fondo decorativo: dos manchas grandes y muy suaves, a la deriva. Menos es
+   más acá — el objetivo es una sensación de profundidad, no confeti. */
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(2%, -3%) scale(1.04);
+  }
+}
+
+.decor-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.35;
+  pointer-events: none;
+  animation: drift 22s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .decor-blob {
+    animation: none;
+  }
+}
+
+/* Trazo del check en la confirmación de turno. */
+@keyframes draw-check {
+  from {
+    stroke-dashoffset: 48;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.check-path {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: draw-check 0.5s 0.2s cubic-bezier(0.65, 0, 0.35, 1) forwards;
 }
