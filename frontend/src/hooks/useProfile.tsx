@@ -1,22 +1,8 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiGet } from "../lib/api";
-import { useAuth } from "./useAuth";
+import { useAuth } from "./useAuthContext";
+import { ProfileContext } from "./ProfileContext";
 import type { ApiStaff } from "../types/api";
-
-interface ProfileContextValue {
-  profile: ApiStaff | null;
-  loading: boolean;
-  refresh: () => Promise<void>;
-}
-
-const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -48,10 +34,4 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       {children}
     </ProfileContext.Provider>
   );
-}
-
-export function useProfile(): ProfileContextValue {
-  const ctx = useContext(ProfileContext);
-  if (!ctx) throw new Error("useProfile debe usarse dentro de <ProfileProvider>");
-  return ctx;
 }

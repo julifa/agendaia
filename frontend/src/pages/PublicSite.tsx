@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
-import { useProfile } from "../hooks/useProfile";
+import { useAuth } from "../hooks/useAuthContext";
+import { useProfile } from "../hooks/useProfileContext";
 import { LoginPanel } from "../components/LoginPanel";
 import { BookingFlow } from "../components/BookingFlow";
 import { DecorBackground } from "../components/DecorBackground";
@@ -90,7 +90,11 @@ function Hero() {
 
 export function PublicSite() {
   const [showLogin, setShowLogin] = useState(false);
-  const [entered, setEntered] = useState(false);
+  // Si Mercado Pago redirige de vuelta acá (`?pago=...`), se salta la
+  // pantalla de bienvenida: BookingFlow ya sabe mostrar el aviso de retorno.
+  const [entered, setEntered] = useState(() =>
+    new URLSearchParams(window.location.search).has("pago"),
+  );
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-soft-white">

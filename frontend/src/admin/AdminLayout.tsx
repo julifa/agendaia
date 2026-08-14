@@ -1,6 +1,6 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
-import { useProfile } from "../hooks/useProfile";
+import { useAuth } from "../hooks/useAuthContext";
+import { useProfile } from "../hooks/useProfileContext";
 import { LoginPanel } from "../components/LoginPanel";
 
 const NAV_LINKS = [

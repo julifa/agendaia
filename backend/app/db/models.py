@@ -47,6 +47,17 @@ class AppointmentStatus(str, enum.Enum):
     no_show = "no_show"
 
 
+class PaymentMethod(str, enum.Enum):
+    cash = "cash"
+    mercadopago = "mercadopago"
+
+
+class PaymentStatus(str, enum.Enum):
+    unpaid = "unpaid"
+    pending = "pending"
+    paid = "paid"
+
+
 #: Estados que ocupan agenda. Debe coincidir con el WHERE del EXCLUDE constraint
 #: `appointments_no_double_booking` en la migración.
 #: Es una tupla y no un set porque se pasa directo a `Column.in_()`.
@@ -58,6 +69,12 @@ ACTIVE_STATUSES: tuple[AppointmentStatus, ...] = (
 _role_enum = Enum(UserRole, name="user_role", schema="public", create_type=False)
 _status_enum = Enum(
     AppointmentStatus, name="appointment_status", schema="public", create_type=False
+)
+_payment_method_enum = Enum(
+    PaymentMethod, name="payment_method", schema="public", create_type=False
+)
+_payment_status_enum = Enum(
+    PaymentStatus, name="payment_status", schema="public", create_type=False
 )
 
 
@@ -200,6 +217,13 @@ class Appointment(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     cancelled_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     cancellation_reason: Mapped[str | None] = mapped_column(Text)
+    #: Seña: método elegido, estado de pago (independiente de `status`) y
+    #: monto congelado al momento de reservar. Ver 20260814130000_payment_fields.sql.
+    payment_method: Mapped[PaymentMethod | None] = mapped_column(_payment_method_enum)
+    payment_status: Mapped[PaymentStatus] = mapped_column(_payment_status_enum)
+    deposit_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    mp_preference_id: Mapped[str | None] = mapped_column(Text)
+    mp_payment_id: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

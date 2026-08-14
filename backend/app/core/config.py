@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,18 @@ class Settings(BaseSettings):
 
     # Webhook de notificaciones (WhatsApp/Email) descrito en ARCHITECTURE.md
     notifications_webhook_url: str | None = None
+
+    # Mercado Pago (Checkout Pro) para la seña de la reserva. Ver
+    # app/services/payments.py.
+    mercadopago_access_token: str = ""
+    booking_deposit_amount: Decimal = Decimal("8500")
+    #: Dominio público del frontend, usado para armar los back_urls a los que
+    #: Mercado Pago redirige al cliente después de pagar.
+    frontend_base_url: str = "http://localhost:5173"
+    #: Dominio público de este backend, usado como notification_url del
+    #: webhook. Debe ser accesible desde internet (no localhost) para que
+    #: Mercado Pago pueda avisar el pago.
+    backend_public_url: str = "http://localhost:8000"
 
     db_echo: bool = False
     cors_origins: list[str] = ["http://localhost:5173"]

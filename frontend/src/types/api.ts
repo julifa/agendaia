@@ -32,6 +32,9 @@ export interface ApiAvailability {
   slots: ApiSlot[];
 }
 
+export type PaymentMethod = "cash" | "mercadopago";
+export type PaymentStatus = "unpaid" | "pending" | "paid";
+
 export interface ApiBooking {
   id: string;
   salon_id: string;
@@ -50,6 +53,11 @@ export interface ApiBooking {
   status: AppointmentStatus;
   notes: string | null;
   created_at: string;
+  payment_method: PaymentMethod | null;
+  payment_status: PaymentStatus;
+  deposit_amount: string | null;
+  // Solo viene en la respuesta de POST /bookings, no en GET.
+  mp_init_point: string | null;
 }
 
 export interface ApiPublicStaff {

@@ -6,10 +6,10 @@ import { AdminLayout } from "./AdminLayout";
 const mockUseAuth = vi.fn();
 const mockUseProfile = vi.fn();
 
-vi.mock("../hooks/useAuth", () => ({
+vi.mock("../hooks/useAuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }));
-vi.mock("../hooks/useProfile", () => ({
+vi.mock("../hooks/useProfileContext", () => ({
   useProfile: () => mockUseProfile(),
 }));
 

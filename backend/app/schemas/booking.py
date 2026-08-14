@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.db.models import AppointmentStatus
+from app.db.models import AppointmentStatus, PaymentMethod, PaymentStatus
 
 
 class SlotOut(BaseModel):
@@ -32,6 +32,7 @@ class BookingCreate(BaseModel):
     guest_name: str | None = Field(default=None, max_length=120)
     guest_phone: str | None = Field(default=None, max_length=40)
     notes: str | None = Field(default=None, max_length=1000)
+    payment_method: PaymentMethod | None = None
 
     @model_validator(mode="after")
     def _require_tz(self) -> "BookingCreate":
@@ -83,6 +84,12 @@ class BookingOut(BaseModel):
     status: AppointmentStatus
     notes: str | None
     created_at: dt.datetime
+    payment_method: PaymentMethod | None = None
+    payment_status: PaymentStatus = PaymentStatus.unpaid
+    deposit_amount: Decimal | None = None
+    #: URL de checkout de Mercado Pago. Solo viene poblada en la respuesta de
+    #: `POST /bookings` justo después de crear el turno; no es una columna.
+    mp_init_point: str | None = None
 
 
 class ErrorOut(BaseModel):

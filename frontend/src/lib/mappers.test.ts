@@ -19,6 +19,10 @@ function makeApiBooking(overrides: Partial<ApiBooking> = {}): ApiBooking {
     status: "pending",
     notes: null,
     created_at: "2026-08-01T00:00:00Z",
+    payment_method: null,
+    payment_status: "unpaid",
+    deposit_amount: null,
+    mp_init_point: null,
     ...overrides,
   };
 }

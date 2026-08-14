@@ -1,12 +1,23 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { apiGet, apiPost, ApiError } from "../lib/api";
 import { toDisplayBooking } from "../lib/mappers";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../hooks/useAuthContext";
+import { useProfile } from "../hooks/useProfileContext";
 import { BookingCard } from "./BookingCard";
 import type { ApiAvailability, ApiBooking, ApiPublicStaff, ApiService, ApiSlot } from "../types/api";
 
 const SALON_ID = import.meta.env.VITE_SALON_ID;
+
+// Debe coincidir con BOOKING_DEPOSIT_AMOUNT en el backend — no hay endpoint
+// público que exponga el monto configurado antes de reservar.
+const DEPOSIT_AMOUNT = 8500;
+
+const depositFormatter = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 0,
+});
 
 const timeFormatter = new Intl.DateTimeFormat("es-AR", {
   hour: "2-digit",
@@ -14,6 +25,11 @@ const timeFormatter = new Intl.DateTimeFormat("es-AR", {
 });
 const weekdayFormatter = new Intl.DateTimeFormat("es-AR", { weekday: "short" });
 const monthFormatter = new Intl.DateTimeFormat("es-AR", { month: "short" });
+const fullDateFormatter = new Intl.DateTimeFormat("es-AR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+});
 
 /** Fecha local en formato YYYY-MM-DD. `toISOString()` convierte a UTC
  * primero, así que cerca de medianoche en Argentina (UTC-3) devolvería el
@@ -61,8 +77,12 @@ function groupSlots(slots: ApiSlot[]) {
 const STEPS = [
   { label: "Servicio", heading: "¿Qué te gustaría hacerte?" },
   { label: "Horario", heading: "¿Cuándo te queda bien?" },
-  { label: "Confirmar", heading: "Contanos quién sos" },
+  { label: "Confirmar", heading: "Confirmá tu turno" },
 ];
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 function currentStepIndex(hasService: boolean, hasSlot: boolean): number {
   if (!hasService) return 0;
@@ -98,10 +118,39 @@ function SectionHeading({ children }: { children: ReactNode }) {
   );
 }
 
+function BackLink({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mb-2 flex items-center gap-1 text-xs font-medium text-charcoal/40 transition-colors hover:text-champagne"
+    >
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none">
+        <path
+          d="M15 6l-6 6 6 6"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {children}
+    </button>
+  );
+}
+
 export function BookingFlow() {
   const { user } = useAuth();
+  const { profile } = useProfile();
+  // La sesión de Supabase puede pertenecer a un owner/staff que quedó
+  // logueado y entra a la página pública (ej. para probar el flujo): el
+  // backend solo autocompleta `client_id` desde el perfil para el rol
+  // 'client', así que acá también hay que pedir nombre/WhatsApp de invitado,
+  // o el turno queda sin cliente y sin forma de completarlo en la UI.
+  const bookingAsGuest = !user || profile?.role !== "client";
 
   const [services, setServices] = useState<ApiService[]>([]);
+  const [loadingServices, setLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState<string | null>(null);
 
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
@@ -118,22 +167,40 @@ export function BookingFlow() {
   const [guestPhone, setGuestPhone] = useState("");
   const guestFullName = `${guestFirstName.trim()} ${guestLastName.trim()}`.trim();
 
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "mercadopago" | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<ApiBooking | null>(null);
+  const [mpUnavailable, setMpUnavailable] = useState(false);
+
+  // Mercado Pago vuelve acá con `?pago=exito|pendiente|error` (ver back_urls
+  // en app/services/payments.py). El turno ya fue creado antes del redirect;
+  // esta pantalla es solo informativa, no requiere volver a consultar nada.
+  const [paymentReturn] = useState(() =>
+    new URLSearchParams(window.location.search).get("pago"),
+  );
+  const [paymentReturnDismissed, setPaymentReturnDismissed] = useState(false);
 
   const selectedService = useMemo(
     () => services.find((s) => s.id === selectedServiceId) ?? null,
     [services, selectedServiceId],
   );
 
-  useEffect(() => {
+  const loadServices = useCallback(() => {
+    setLoadingServices(true);
+    setServicesError(null);
     apiGet<ApiService[]>(`/services?salon_id=${SALON_ID}`)
       .then(setServices)
       .catch((err) =>
         setServicesError(err instanceof Error ? err.message : "No se pudieron cargar los servicios"),
-      );
+      )
+      .finally(() => setLoadingServices(false));
   }, []);
+
+  useEffect(() => {
+    loadServices();
+  }, [loadServices]);
 
   useEffect(() => {
     if (!selectedServiceId) {
@@ -172,7 +239,7 @@ export function BookingFlow() {
   }
 
   async function handleSubmit() {
-    if (!selectedService || !selectedSlot) return;
+    if (!selectedService || !selectedSlot || !paymentMethod) return;
     setFormError(null);
     setSubmitting(true);
     try {
@@ -180,9 +247,20 @@ export function BookingFlow() {
         salon_id: SALON_ID,
         service_id: selectedService.id,
         start_time: selectedSlot.start,
-        guest_name: user ? undefined : guestFullName,
-        guest_phone: user ? undefined : guestPhone.trim(),
+        guest_name: bookingAsGuest ? guestFullName : undefined,
+        guest_phone: bookingAsGuest ? guestPhone.trim() : undefined,
+        payment_method: paymentMethod,
       });
+
+      if (booking.payment_method === "mercadopago" && booking.mp_init_point) {
+        // Redirect de página completa: Checkout Pro de Mercado Pago vive
+        // afuera de esta SPA. Vuelve a `/?pago=...` (ver back_urls en
+        // app/services/payments.py), donde este mismo componente muestra el
+        // aviso de retorno.
+        window.location.href = booking.mp_init_point;
+        return;
+      }
+      setMpUnavailable(booking.payment_method === "mercadopago" && !booking.mp_init_point);
       setConfirmed(booking);
     } catch (err) {
       if (err instanceof ApiError && err.code === "slot_unavailable") {
@@ -199,11 +277,56 @@ export function BookingFlow() {
 
   function reset() {
     setConfirmed(null);
+    setMpUnavailable(false);
     setSelectedSlot(null);
+    setPaymentMethod(null);
     setGuestFirstName("");
     setGuestLastName("");
     setGuestPhone("");
     void refreshSlots();
+  }
+
+  if (paymentReturn && !paymentReturnDismissed) {
+    const copy: Record<string, { title: string; body: string }> = {
+      exito: {
+        title: "¡Pago recibido!",
+        body: "Ya registramos tu seña. En breve te confirmamos el turno por WhatsApp.",
+      },
+      pendiente: {
+        title: "Pago en proceso",
+        body: "Tu pago está siendo procesado. Te confirmamos el turno por WhatsApp apenas se acredite.",
+      },
+      error: {
+        title: "El pago no se completó",
+        body: "Tu turno quedó reservado igual. Escribinos por WhatsApp para coordinar la seña o volver a intentar el pago.",
+      },
+    };
+    const { title, body } = copy[paymentReturn] ?? copy.pendiente;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="text-center"
+      >
+        <p className="font-display text-xl text-charcoal">{title}</p>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-charcoal/55">{body}</p>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          type="button"
+          onClick={() => {
+            window.history.replaceState({}, "", window.location.pathname);
+            setPaymentReturnDismissed(true);
+          }}
+          className="mt-6 rounded-full border border-charcoal/15 px-5 py-2.5 text-sm text-charcoal/60
+            transition-colors hover:border-charcoal/30 hover:text-charcoal"
+        >
+          Volver a la reserva
+        </motion.button>
+      </motion.div>
+    );
   }
 
   if (confirmed && selectedService) {
@@ -244,9 +367,22 @@ export function BookingFlow() {
             confirmed,
             selectedService,
             assignedStaff,
-            user?.user_metadata?.full_name ?? (guestFullName || "Vos"),
+            bookingAsGuest ? guestFullName || "Vos" : (user?.user_metadata?.full_name ?? "Vos"),
           )}
         />
+
+        {confirmed.payment_method === "cash" && (
+          <p className="mt-4 text-center text-sm text-charcoal/55">
+            Recordá abonar la seña de {depositFormatter.format(DEPOSIT_AMOUNT)} en el salón.
+          </p>
+        )}
+        {mpUnavailable && (
+          <p className="mt-4 text-center text-sm text-red-600">
+            Tu turno quedó reservado, pero no pudimos generar el link de pago. Te vamos a
+            contactar para coordinar la seña.
+          </p>
+        )}
+
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
@@ -270,9 +406,32 @@ export function BookingFlow() {
       {/* Paso 1: servicio */}
       <section>
         <SectionHeading>{STEPS[0].heading}</SectionHeading>
-        {servicesError && <p className="mt-2 text-sm text-red-600">{servicesError}</p>}
+        {servicesError && (
+          <div className="mt-2 flex items-center gap-2">
+            <p className="text-sm text-red-600">{servicesError}</p>
+            <button
+              type="button"
+              onClick={loadServices}
+              className="text-sm font-medium text-champagne underline underline-offset-4"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+        {loadingServices && (
+          <div className="mt-4 flex flex-col gap-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-[4.5rem] animate-pulse rounded-[1.4rem] bg-charcoal/8" />
+            ))}
+          </div>
+        )}
+        {!loadingServices && !servicesError && services.length === 0 && (
+          <p className="mt-2 text-sm text-charcoal/45">
+            No hay servicios disponibles por el momento.
+          </p>
+        )}
         <div className="mt-4 flex flex-col gap-2">
-          {services.map((service) => {
+          {!loadingServices && services.map((service) => {
             const isSelected = service.id === selectedServiceId;
             return (
               <motion.button
@@ -349,6 +508,14 @@ export function BookingFlow() {
             transition={{ duration: 0.3 }}
             className="mt-8 border-t border-charcoal/8 pt-7"
           >
+            <BackLink
+              onClick={() => {
+                setSelectedServiceId(null);
+                setSelectedSlot(null);
+              }}
+            >
+              Cambiar servicio
+            </BackLink>
             <SectionHeading>{STEPS[1].heading}</SectionHeading>
 
             <div className="mt-4 -mx-1 flex gap-1.5 overflow-x-auto rounded-2xl bg-charcoal/[0.03] p-1.5">
@@ -446,9 +613,9 @@ export function BookingFlow() {
         )}
       </AnimatePresence>
 
-      {/* Paso 3: datos del invitado (si no hay sesión) + confirmación */}
+      {/* Paso 3: resumen, seña y datos del invitado (si no hay sesión) */}
       <AnimatePresence>
-        {selectedSlot && (
+        {selectedService && selectedSlot && (
           <motion.section
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -456,38 +623,91 @@ export function BookingFlow() {
             transition={{ duration: 0.3 }}
             className="mt-8 border-t border-charcoal/8 pt-7"
           >
-            {!user && (
-              <>
-                <SectionHeading>{STEPS[2].heading}</SectionHeading>
-                <div className="mt-4 flex flex-col gap-2.5">
-                  <div className="flex gap-2.5">
-                    <input
-                      type="text"
-                      placeholder="Nombre"
-                      required
-                      value={guestFirstName}
-                      onChange={(e) => setGuestFirstName(e.target.value)}
-                      className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Apellido"
-                      required
-                      value={guestLastName}
-                      onChange={(e) => setGuestLastName(e.target.value)}
-                      className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
-                    />
-                  </div>
+            <BackLink onClick={() => setSelectedSlot(null)}>Cambiar horario</BackLink>
+            <SectionHeading>{STEPS[2].heading}</SectionHeading>
+
+            <div className="mt-4 rounded-2xl border border-charcoal/8 bg-charcoal/[0.02] p-4">
+              <p className="font-display text-base text-charcoal">{selectedService.name}</p>
+              <p className="mt-1 text-sm text-charcoal/55">
+                {capitalize(fullDateFormatter.format(new Date(selectedSlot.start)))} ·{" "}
+                {timeFormatter.format(new Date(selectedSlot.start))} hs
+              </p>
+              <p className="mt-2 font-display text-lg text-champagne">
+                {new Intl.NumberFormat("es-AR", {
+                  style: "currency",
+                  currency: selectedService.currency,
+                }).format(Number(selectedService.price))}
+              </p>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-champagne/25 bg-champagne/[0.06] px-4 py-3">
+              <p className="text-sm text-charcoal/75">
+                Para reservar se pide una{" "}
+                <span className="font-medium text-charcoal">
+                  seña de {depositFormatter.format(DEPOSIT_AMOUNT)}
+                </span>
+                .
+              </p>
+            </div>
+
+            <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-wide text-charcoal/35">
+              ¿Cómo pagás la seña?
+            </p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {(
+                [
+                  { value: "cash" as const, label: "Efectivo", hint: "En el salón" },
+                  { value: "mercadopago" as const, label: "Mercado Pago", hint: "Ahora, online" },
+                ]
+              ).map((option) => {
+                const isSelected = paymentMethod === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setPaymentMethod(option.value)}
+                    className={`rounded-2xl border px-3.5 py-3 text-left transition-colors duration-200 ${
+                      isSelected
+                        ? "border-champagne/50 bg-champagne/[0.07]"
+                        : "border-charcoal/8 bg-white hover:border-baby-pink"
+                    }`}
+                  >
+                    <p className="font-display text-sm text-charcoal">{option.label}</p>
+                    <p className="mt-0.5 text-[12px] text-charcoal/45">{option.hint}</p>
+                  </button>
+                );
+              })}
+            </div>
+
+            {bookingAsGuest && (
+              <div className="mt-5 flex flex-col gap-2.5">
+                <div className="flex gap-2.5">
                   <input
-                    type="tel"
-                    placeholder="WhatsApp"
+                    type="text"
+                    placeholder="Nombre"
                     required
-                    value={guestPhone}
-                    onChange={(e) => setGuestPhone(e.target.value)}
-                    className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                    value={guestFirstName}
+                    onChange={(e) => setGuestFirstName(e.target.value)}
+                    className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Apellido"
+                    required
+                    value={guestLastName}
+                    onChange={(e) => setGuestLastName(e.target.value)}
+                    className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
                   />
                 </div>
-              </>
+                <input
+                  type="tel"
+                  placeholder="WhatsApp"
+                  required
+                  value={guestPhone}
+                  onChange={(e) => setGuestPhone(e.target.value)}
+                  className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                />
+              </div>
             )}
 
             {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
@@ -498,14 +718,22 @@ export function BookingFlow() {
               type="button"
               disabled={
                 submitting ||
-                (!user && (!guestFirstName.trim() || !guestLastName.trim() || !guestPhone.trim()))
+                !paymentMethod ||
+                (bookingAsGuest &&
+                  (!guestFirstName.trim() || !guestLastName.trim() || !guestPhone.trim()))
               }
               onClick={handleSubmit}
               className="group mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-champagne py-3.5
                 text-sm font-medium tracking-wide text-white transition-opacity disabled:opacity-40"
               style={{ boxShadow: submitting ? "none" : "var(--shadow-glow)" }}
             >
-              {submitting ? "Reservando..." : "Confirmar reserva"}
+              {submitting
+                ? paymentMethod === "mercadopago"
+                  ? "Redirigiendo a Mercado Pago..."
+                  : "Reservando..."
+                : paymentMethod === "mercadopago"
+                  ? "Pagar seña y reservar"
+                  : "Confirmar reserva"}
               {!submitting && (
                 <svg
                   viewBox="0 0 24 24"

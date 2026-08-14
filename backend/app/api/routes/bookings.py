@@ -152,6 +152,7 @@ async def create_booking(
             guest_phone=guest_phone,
             notes=payload.notes,
             created_by=created_by,
+            payment_method=payload.payment_method,
         ),
         idempotency_key=idempotency_key,
     )

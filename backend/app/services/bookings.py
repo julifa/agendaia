@@ -24,6 +24,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.errors import (
     ConflictError,
     InvalidBookingWindow,
@@ -32,18 +33,22 @@ from app.core.errors import (
     ResourceNotFound,
     SlotUnavailable,
     StaffCannotPerformService,
+    UpstreamError,
 )
 from app.db.models import (
     ACTIVE_STATUSES,
     Appointment,
     AppointmentStatus,
     IdempotencyKey,
+    PaymentMethod,
+    PaymentStatus,
     Profile,
     Salon,
     Service,
 )
-from app.services import availability, notifications
+from app.services import availability, notifications, payments
 from app.services.availability import SlotTakenLocally
+from app.services.payments import MercadoPagoNotConfigured
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +101,9 @@ class BookingRequest:
     created_by: uuid.UUID | None = None
     #: Confirmar de una en vez de dejar en 'pending' (reservas cargadas por el salón).
     auto_confirm: bool = False
+    #: Seña elegida por el cliente. None para turnos cargados por el salón
+    #: sin política de seña (ej. walk-ins).
+    payment_method: PaymentMethod | None = None
 
 
 def _integrity_error_to_domain(exc: IntegrityError) -> Exception:
@@ -205,6 +213,12 @@ async def create_booking(
 
     staff_id, interval = await _resolve_staff(session, request, salon, service, now)
 
+    deposit_amount = (
+        get_settings().booking_deposit_amount
+        if request.payment_method is not None
+        else None
+    )
+
     if interval is None:
         # El cliente eligió profesional: recién acá se valida su disponibilidad.
         try:
@@ -242,6 +256,9 @@ async def create_booking(
         ),
         notes=request.notes,
         created_by=request.created_by,
+        payment_method=request.payment_method,
+        payment_status=PaymentStatus.unpaid,
+        deposit_amount=deposit_amount,
     )
     session.add(appointment)
 
@@ -261,6 +278,30 @@ async def create_booking(
     await session.refresh(appointment)
     await notifications.notify("booking.created", appointment)
     await attach_client_name(session, appointment)
+
+    # `mp_init_point` no es una columna: es la URL de checkout que el
+    # frontend necesita para redirigir, generada acá mismo así el cliente no
+    # tiene que hacer un segundo request. Se deja en None si Mercado Pago no
+    # está configurado o rechaza la preferencia: el turno igual queda
+    # reservado (ver comentario más abajo) y el salón coordina la seña a mano.
+    appointment.mp_init_point = None
+    if request.payment_method is PaymentMethod.mercadopago:
+        try:
+            preference = await payments.create_preference(
+                appointment, description=f"Seña de turno — {service.name}"
+            )
+        except (UpstreamError, MercadoPagoNotConfigured):
+            logger.exception(
+                "No se pudo crear la preferencia de Mercado Pago para el turno %s",
+                appointment.id,
+            )
+        else:
+            appointment.mp_preference_id = preference["id"]
+            appointment.payment_status = PaymentStatus.pending
+            await session.commit()
+            await session.refresh(appointment)
+            appointment.mp_init_point = preference["init_point"]
+
     return appointment
 
 
@@ -399,6 +440,62 @@ async def cancel_booking(
     return await transition_status(
         session, appointment_id, AppointmentStatus.cancelled, reason=reason
     )
+
+
+async def confirm_mercadopago_payment(session: AsyncSession, payment_id: str) -> None:
+    """Reconcilia una notificación de pago del webhook de Mercado Pago.
+
+    Nunca confía en el cuerpo de la notificación: siempre vuelve a pedirle el
+    pago a la API de Mercado Pago con nuestro propio access token antes de
+    tocar el turno. Es idempotente — un mismo `payment_id` notificado dos
+    veces (reintentos de Mercado Pago) no dispara el aviso de confirmación
+    dos veces ni rompe si el turno ya no está en 'pending'.
+    """
+    try:
+        payment = await payments.get_payment(payment_id)
+    except (UpstreamError, MercadoPagoNotConfigured):
+        logger.warning("No se pudo verificar el pago %s en Mercado Pago", payment_id)
+        return
+
+    external_reference = payment.get("external_reference")
+    if not external_reference:
+        logger.warning("Pago de Mercado Pago %s sin external_reference", payment_id)
+        return
+
+    try:
+        appointment_id = uuid.UUID(str(external_reference))
+    except ValueError:
+        logger.warning(
+            "external_reference inválido en el pago %s: %s",
+            payment_id,
+            external_reference,
+        )
+        return
+
+    appointment = await session.get(Appointment, appointment_id)
+    if appointment is None:
+        logger.warning(
+            "El pago %s de Mercado Pago referencia un turno inexistente (%s)",
+            payment_id,
+            appointment_id,
+        )
+        return
+
+    if appointment.payment_status is PaymentStatus.paid:
+        return  # ya procesado; reintento del webhook.
+
+    appointment.mp_payment_id = str(payment.get("id") or payment_id)
+
+    if payment.get("status") != "approved":
+        await session.commit()
+        return
+
+    appointment.payment_status = PaymentStatus.paid
+    await session.commit()
+    await session.refresh(appointment)
+
+    if appointment.status is AppointmentStatus.pending:
+        await transition_status(session, appointment.id, AppointmentStatus.confirmed)
 
 
 async def reschedule_booking(

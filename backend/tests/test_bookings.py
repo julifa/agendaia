@@ -9,6 +9,7 @@ IntegrityError a errores de dominio, y la máquina de estados.
 
 import datetime as dt
 import uuid
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -19,9 +20,10 @@ from app.core.errors import (
     InvalidStateTransition,
     ResourceNotFound,
     SlotUnavailable,
+    UpstreamError,
 )
-from app.db.models import AppointmentStatus, IdempotencyKey, Profile
-from app.services import availability, bookings, notifications
+from app.db.models import AppointmentStatus, IdempotencyKey, PaymentMethod, PaymentStatus, Profile
+from app.services import availability, bookings, notifications, payments
 from app.services.availability import Interval, OutsideWorkingHours, SlotTakenLocally
 from app.services.bookings import BookingRequest
 
@@ -79,7 +81,14 @@ def make_salon(**overrides):
 
 
 def make_service(**overrides):
-    base = dict(id=SERVICE_ID, salon_id=SALON_ID, occupied_minutes=60, price=1000, currency="ARS")
+    base = dict(
+        id=SERVICE_ID,
+        salon_id=SALON_ID,
+        name="Manicura",
+        occupied_minutes=60,
+        price=1000,
+        currency="ARS",
+    )
     base.update(overrides)
     return SimpleNamespace(**base)
 
@@ -320,6 +329,8 @@ def make_appointment(**overrides):
         end_time=END,
         staff_id=STAFF_A,
         service_id=SERVICE_ID,
+        payment_status=PaymentStatus.unpaid,
+        mp_payment_id=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -544,3 +555,220 @@ async def test_idempotent_libera_la_key_si_create_booking_falla(patched, monkeyp
     # pueda volver a evaluarse de cero.
     assert len(session.executed) == 1
     assert session.commit_calls == 2  # reserva de la key + el DELETE que la libera
+
+
+# --- create_booking: seña (efectivo / Mercado Pago) --------------------------
+
+
+@pytest.mark.asyncio
+async def test_sin_payment_method_no_guarda_sena(patched, monkeypatch):
+    async def eligible_staff_ids(session, service_id, only_staff_id=None):
+        return [STAFF_A]
+
+    async def assert_slot_bookable(session, **kwargs):
+        return Interval(START, END)
+
+    monkeypatch.setattr(availability, "eligible_staff_ids", eligible_staff_ids)
+    monkeypatch.setattr(availability, "assert_slot_bookable", assert_slot_bookable)
+
+    session = FakeSession()
+    request = BookingRequest(
+        salon_id=SALON_ID,
+        service_id=SERVICE_ID,
+        start_time=START,
+        staff_id=STAFF_A,
+        guest_name="Julieta",
+    )
+    appointment = await bookings.create_booking(session, request, now=NOW)
+
+    assert appointment.payment_method is None
+    assert appointment.deposit_amount is None
+    assert appointment.payment_status == PaymentStatus.unpaid
+    assert appointment.mp_init_point is None
+
+
+@pytest.mark.asyncio
+async def test_efectivo_congela_el_monto_de_sena_sin_llamar_a_mercadopago(
+    patched, monkeypatch
+):
+    async def eligible_staff_ids(session, service_id, only_staff_id=None):
+        return [STAFF_A]
+
+    async def assert_slot_bookable(session, **kwargs):
+        return Interval(START, END)
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("no debería llamarse a Mercado Pago para pago en efectivo")
+
+    monkeypatch.setattr(availability, "eligible_staff_ids", eligible_staff_ids)
+    monkeypatch.setattr(availability, "assert_slot_bookable", assert_slot_bookable)
+    monkeypatch.setattr(payments, "create_preference", fail_if_called)
+
+    session = FakeSession()
+    request = BookingRequest(
+        salon_id=SALON_ID,
+        service_id=SERVICE_ID,
+        start_time=START,
+        staff_id=STAFF_A,
+        guest_name="Julieta",
+        payment_method=PaymentMethod.cash,
+    )
+    appointment = await bookings.create_booking(session, request, now=NOW)
+
+    assert appointment.payment_method == PaymentMethod.cash
+    assert appointment.deposit_amount == Decimal("8500")
+    assert appointment.payment_status == PaymentStatus.unpaid
+    assert appointment.status == AppointmentStatus.pending
+    assert appointment.mp_init_point is None
+    assert session.commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_mercadopago_crea_preferencia_y_deja_la_sena_pendiente(patched, monkeypatch):
+    async def eligible_staff_ids(session, service_id, only_staff_id=None):
+        return [STAFF_A]
+
+    async def assert_slot_bookable(session, **kwargs):
+        return Interval(START, END)
+
+    async def fake_create_preference(appointment, description):
+        assert appointment.deposit_amount == Decimal("8500")
+        assert "Manicura" in description
+        return {"id": "pref-123", "init_point": "https://mercadopago.com/checkout/pref-123"}
+
+    monkeypatch.setattr(availability, "eligible_staff_ids", eligible_staff_ids)
+    monkeypatch.setattr(availability, "assert_slot_bookable", assert_slot_bookable)
+    monkeypatch.setattr(payments, "create_preference", fake_create_preference)
+
+    session = FakeSession()
+    request = BookingRequest(
+        salon_id=SALON_ID,
+        service_id=SERVICE_ID,
+        start_time=START,
+        staff_id=STAFF_A,
+        guest_name="Julieta",
+        payment_method=PaymentMethod.mercadopago,
+    )
+    appointment = await bookings.create_booking(session, request, now=NOW)
+
+    assert appointment.status == AppointmentStatus.pending  # el turno ya quedó reservado
+    assert appointment.payment_status == PaymentStatus.pending
+    assert appointment.mp_preference_id == "pref-123"
+    assert appointment.mp_init_point == "https://mercadopago.com/checkout/pref-123"
+    assert session.commit_calls == 2  # el INSERT del turno + guardar la preferencia
+
+
+@pytest.mark.asyncio
+async def test_mercadopago_si_falla_la_preferencia_el_turno_igual_queda_reservado(
+    patched, monkeypatch
+):
+    async def eligible_staff_ids(session, service_id, only_staff_id=None):
+        return [STAFF_A]
+
+    async def assert_slot_bookable(session, **kwargs):
+        return Interval(START, END)
+
+    async def fake_create_preference(appointment, description):
+        raise UpstreamError("Mercado Pago no responde")
+
+    monkeypatch.setattr(availability, "eligible_staff_ids", eligible_staff_ids)
+    monkeypatch.setattr(availability, "assert_slot_bookable", assert_slot_bookable)
+    monkeypatch.setattr(payments, "create_preference", fake_create_preference)
+
+    session = FakeSession()
+    request = BookingRequest(
+        salon_id=SALON_ID,
+        service_id=SERVICE_ID,
+        start_time=START,
+        staff_id=STAFF_A,
+        guest_name="Julieta",
+        payment_method=PaymentMethod.mercadopago,
+    )
+    appointment = await bookings.create_booking(session, request, now=NOW)
+
+    assert appointment.status == AppointmentStatus.pending
+    assert appointment.payment_status == PaymentStatus.unpaid
+    assert appointment.mp_init_point is None
+    assert session.commit_calls == 1  # solo el INSERT; no se guardó preferencia
+
+
+# --- confirm_mercadopago_payment (webhook) ------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_webhook_pago_aprobado_confirma_el_turno(patched, monkeypatch):
+    appt = make_appointment(
+        status=AppointmentStatus.pending, payment_status=PaymentStatus.pending
+    )
+    session = FakeSession()
+    session.get_map[(bookings.Appointment, appt.id)] = appt
+
+    async def fake_get_payment(payment_id):
+        assert payment_id == "pay-1"
+        return {"id": "pay-1", "status": "approved", "external_reference": str(appt.id)}
+
+    monkeypatch.setattr(payments, "get_payment", fake_get_payment)
+
+    await bookings.confirm_mercadopago_payment(session, "pay-1")
+
+    assert appt.payment_status == PaymentStatus.paid
+    assert appt.mp_payment_id == "pay-1"
+    assert appt.status == AppointmentStatus.confirmed
+    assert patched["notified"] == [("booking.confirmed", {"reason": None})]
+
+
+@pytest.mark.asyncio
+async def test_webhook_pago_rechazado_no_toca_el_turno(patched, monkeypatch):
+    appt = make_appointment(
+        status=AppointmentStatus.pending, payment_status=PaymentStatus.pending
+    )
+    session = FakeSession()
+    session.get_map[(bookings.Appointment, appt.id)] = appt
+
+    async def fake_get_payment(payment_id):
+        return {"id": "pay-2", "status": "rejected", "external_reference": str(appt.id)}
+
+    monkeypatch.setattr(payments, "get_payment", fake_get_payment)
+
+    await bookings.confirm_mercadopago_payment(session, "pay-2")
+
+    assert appt.payment_status == PaymentStatus.pending
+    assert appt.status == AppointmentStatus.pending
+    assert patched["notified"] == []
+
+
+@pytest.mark.asyncio
+async def test_webhook_es_idempotente_si_la_sena_ya_estaba_paga(patched, monkeypatch):
+    """No hay forma de saber que ya está pago sin resolver primero a qué
+    turno corresponde `payment_id` (viene de `external_reference`), así que
+    `get_payment` sí se llama — lo idempotente es que no se vuelve a
+    commitear ni a disparar `booking.confirmed` una segunda vez."""
+    appt = make_appointment(
+        status=AppointmentStatus.confirmed, payment_status=PaymentStatus.paid
+    )
+    session = FakeSession()
+    session.get_map[(bookings.Appointment, appt.id)] = appt
+
+    async def fake_get_payment(payment_id):
+        return {"id": "pay-3", "status": "approved", "external_reference": str(appt.id)}
+
+    monkeypatch.setattr(payments, "get_payment", fake_get_payment)
+
+    await bookings.confirm_mercadopago_payment(session, "pay-3")
+
+    assert session.commit_calls == 0
+    assert patched["notified"] == []
+
+
+@pytest.mark.asyncio
+async def test_webhook_turno_inexistente_no_rompe(patched, monkeypatch):
+    session = FakeSession()
+
+    async def fake_get_payment(payment_id):
+        return {"id": "pay-4", "status": "approved", "external_reference": str(uuid.uuid4())}
+
+    monkeypatch.setattr(payments, "get_payment", fake_get_payment)
+
+    await bookings.confirm_mercadopago_payment(session, "pay-4")
+
+    assert session.commit_calls == 0

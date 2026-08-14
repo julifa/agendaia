@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../hooks/useAuthContext";
 
 const SALON_ID = import.meta.env.VITE_SALON_ID;
 
