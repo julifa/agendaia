@@ -107,6 +107,14 @@ async def create_booking(
             raise PermissionDenied(
                 "Iniciá sesión para reservar como cliente registrado"
             )
+        # El WhatsApp es obligatorio solo acá (invitado self-service): es el
+        # único canal de contacto que tiene el salón para confirmar el turno
+        # sin cuenta. Staff/owner cargando un turno a mano (más abajo) puede
+        # omitirlo, ej. un walk-in que no lo quiso dar.
+        if not (payload.guest_phone and payload.guest_phone.strip()):
+            raise ResourceNotFound(
+                "Se requiere un número de WhatsApp para reservar como invitado"
+            )
         client_id, guest_name, guest_phone, created_by = (
             None,
             payload.guest_name,

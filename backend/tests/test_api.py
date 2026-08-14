@@ -161,6 +161,7 @@ def test_invitado_puede_reservar_sin_sesion(client, monkeypatch):
     async def fake_create(session, request, now=None):
         assert request.client_id is None
         assert request.guest_name == "Julieta"
+        assert request.guest_phone == "+5491100000000"
         return make_appointment(guest_name="Julieta")
 
     monkeypatch.setattr(bookings_service, "create_booking", fake_create)
@@ -172,10 +173,30 @@ def test_invitado_puede_reservar_sin_sesion(client, monkeypatch):
             "service_id": str(SERVICE_ID),
             "start_time": START.isoformat(),
             "guest_name": "Julieta",
+            "guest_phone": "+5491100000000",
         },
     )
     assert res.status_code == 201
     assert res.json()["status"] == "pending"
+
+
+def test_invitado_sin_whatsapp_no_puede_reservar(client):
+    """El WhatsApp es el único canal que tiene el salón para confirmarle el
+    turno a alguien sin cuenta — por eso es obligatorio, a diferencia del
+    flujo de staff/owner cargando un turno a mano."""
+    as_anonymous()
+
+    res = client.post(
+        "/api/v1/bookings",
+        json={
+            "salon_id": str(SALON_ID),
+            "service_id": str(SERVICE_ID),
+            "start_time": START.isoformat(),
+            "guest_name": "Julieta",
+        },
+    )
+    assert res.status_code == 404
+    assert "whatsapp" in res.json()["message"].lower()
 
 
 def test_invitado_no_puede_asignarse_client_id_ajeno(client):

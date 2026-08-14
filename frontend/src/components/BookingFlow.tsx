@@ -181,7 +181,7 @@ export function BookingFlow() {
         service_id: selectedService.id,
         start_time: selectedSlot.start,
         guest_name: user ? undefined : guestFullName,
-        guest_phone: user ? undefined : guestPhone || undefined,
+        guest_phone: user ? undefined : guestPhone.trim(),
       });
       setConfirmed(booking);
     } catch (err) {
@@ -474,7 +474,8 @@ export function BookingFlow() {
                   </div>
                   <input
                     type="tel"
-                    placeholder="Teléfono (opcional)"
+                    placeholder="WhatsApp"
+                    required
                     value={guestPhone}
                     onChange={(e) => setGuestPhone(e.target.value)}
                     className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
@@ -489,7 +490,10 @@ export function BookingFlow() {
               whileHover={{ scale: submitting ? 1 : 1.015 }}
               whileTap={{ scale: submitting ? 1 : 0.98 }}
               type="button"
-              disabled={submitting || (!user && (!guestFirstName.trim() || !guestLastName.trim()))}
+              disabled={
+                submitting ||
+                (!user && (!guestFirstName.trim() || !guestLastName.trim() || !guestPhone.trim()))
+              }
               onClick={handleSubmit}
               className="group mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-champagne py-3.5
                 text-sm font-medium tracking-wide text-white transition-opacity disabled:opacity-40"
