@@ -278,17 +278,23 @@ export function BookingFlow() {
               <motion.button
                 key={service.id}
                 type="button"
+                whileHover={{ y: isSelected ? 0 : -2 }}
                 whileTap={{ scale: 0.99 }}
                 onClick={() => setSelectedServiceId(service.id)}
-                className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-2xl border py-3.5 pl-4 pr-3.5 text-left transition-colors ${
+                className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-[1.4rem] border py-3.5 pl-4 pr-3.5 text-left transition-colors duration-200 ${
                   isSelected
-                    ? "border-champagne/40 bg-champagne/[0.06]"
+                    ? "border-champagne/50 bg-champagne/[0.07]"
                     : "border-charcoal/8 bg-white hover:border-baby-pink"
                 }`}
+                style={{
+                  boxShadow: isSelected
+                    ? "0 10px 24px -12px rgba(212, 175, 55, 0.4)"
+                    : "0 1px 2px rgba(74, 74, 74, 0.03)",
+                }}
               >
                 <motion.span
                   animate={{ opacity: isSelected ? 1 : 0 }}
-                  className="absolute inset-y-0 left-0 w-[3px] bg-champagne"
+                  className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-champagne/0 via-champagne to-champagne/0"
                 />
                 <div>
                   <p className="font-display text-[1.05rem] text-charcoal">{service.name}</p>

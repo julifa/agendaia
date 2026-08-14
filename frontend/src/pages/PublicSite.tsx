@@ -63,7 +63,9 @@ function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
 function Hero() {
   return (
     <div className="mx-auto max-w-md px-5 pb-8 pt-10 text-center sm:px-6">
-      <Monogram className="mx-auto h-11 w-11 opacity-90" />
+      <div className="glow-orb mx-auto inline-block">
+        <Monogram className="h-12 w-12" />
+      </div>
 
       <p className="mt-4 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.3em] text-champagne">
         <Sparkle className="h-3 w-3" />

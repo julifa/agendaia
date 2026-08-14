@@ -15,8 +15,9 @@ export function Welcome({ onStart }: { onStart: () => void }) {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
+        className="glow-orb inline-block"
       >
-        <Monogram className="mx-auto h-16 w-16" />
+        <Monogram className="mx-auto h-[4.5rem] w-[4.5rem]" />
       </motion.div>
 
       <motion.h1
