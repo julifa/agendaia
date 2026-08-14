@@ -14,7 +14,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ConflictError, ResourceNotFound
+from app.core.errors import ConflictError, ResourceNotFound, UpstreamError
 from app.db.models import (
     Profile,
     Service,
@@ -23,7 +23,13 @@ from app.db.models import (
     TimeOff,
     UserRole,
 )
-from app.schemas.admin import ScheduleBlockIn, ServiceCreate, ServiceUpdate
+from app.schemas.admin import (
+    ScheduleBlockIn,
+    ServiceCreate,
+    ServiceUpdate,
+    StaffInviteCreate,
+)
+from app.services import supabase_admin
 
 _STAFF_ROLES = (UserRole.owner, UserRole.staff)
 
@@ -104,6 +110,36 @@ async def deactivate_service(
 
 
 # --- Staff ---------------------------------------------------------------
+
+
+async def invite_staff(
+    session: AsyncSession, salon_id: uuid.UUID, data: StaffInviteCreate
+) -> Profile:
+    """Crea el usuario en Supabase Auth (manda mail de invitación) y le
+    asigna el rol real. El trigger de alta siempre crea el profile con
+    `role = 'client'` (ver la migración que endurece `handle_new_user`); acá
+    lo corregimos con un UPDATE de confianza hecho por el backend, que no
+    pasa por RLS.
+    """
+    user = await supabase_admin.invite_user(data.email, data.full_name, salon_id)
+    try:
+        profile_id = uuid.UUID(user["id"])
+    except (KeyError, ValueError, TypeError) as exc:
+        raise UpstreamError(
+            "La respuesta del servicio de autenticación no trae un id válido"
+        ) from exc
+
+    profile = await session.get(Profile, profile_id)
+    if profile is None or profile.salon_id != salon_id:
+        raise UpstreamError(
+            "El usuario se creó pero el profile no apareció en este salón",
+            profile_id=str(profile_id),
+        )
+
+    profile.role = UserRole(data.role)
+    await session.commit()
+    await session.refresh(profile)
+    return profile
 
 
 async def list_staff(session: AsyncSession, salon_id: uuid.UUID) -> list[Profile]:

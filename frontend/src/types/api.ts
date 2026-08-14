@@ -117,6 +117,12 @@ export interface ScheduleBlockInput {
   end_time: string;
 }
 
+export interface StaffInviteInput {
+  email: string;
+  full_name: string;
+  role: "owner" | "staff";
+}
+
 export interface ApiTimeOff {
   id: string;
   staff_id: string;

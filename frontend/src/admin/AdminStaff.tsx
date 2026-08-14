@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { apiGet, apiPatch, apiPut, ApiError } from "../lib/api";
-import type { ApiService, ApiStaff } from "../types/api";
+import { apiGet, apiPatch, apiPost, apiPut, ApiError } from "../lib/api";
+import type { ApiService, ApiStaff, StaffInviteInput } from "../types/api";
+
+const EMPTY_INVITE: StaffInviteInput = { email: "", full_name: "", role: "staff" };
 
 export function AdminStaff() {
   const [staff, setStaff] = useState<ApiStaff[]>([]);
@@ -10,6 +12,11 @@ export function AdminStaff() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [invite, setInvite] = useState<StaffInviteInput>(EMPTY_INVITE);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSent, setInviteSent] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -61,6 +68,23 @@ export function AdminStaff() {
     }
   }
 
+  async function handleInvite(event: FormEvent) {
+    event.preventDefault();
+    setInviteBusy(true);
+    setInviteError(null);
+    setInviteSent(null);
+    try {
+      const created = await apiPost<ApiStaff>("/staff/invite", invite);
+      setStaff((prev) => [...prev, created].sort((a, b) => a.full_name.localeCompare(b.full_name)));
+      setInviteSent(`Invitación enviada a ${created.email}`);
+      setInvite(EMPTY_INVITE);
+    } catch (err) {
+      setInviteError(err instanceof ApiError ? err.message : "No se pudo enviar la invitación");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
   function isAssigned(staffId: string, serviceId: string): boolean {
     return assigned[staffId]?.has(serviceId) ?? false;
   }
@@ -88,6 +112,66 @@ export function AdminStaff() {
     <div>
       <h2 className="font-display text-2xl text-charcoal">Staff</h2>
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+      <form
+        onSubmit={(event) => void handleInvite(event)}
+        className="mt-6 flex flex-col gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4 sm:flex-row sm:items-end"
+      >
+        <div className="flex-1">
+          <label className="text-xs text-charcoal/60" htmlFor="invite-email">
+            Email
+          </label>
+          <input
+            id="invite-email"
+            type="email"
+            required
+            value={invite.email}
+            onChange={(e) => setInvite((prev) => ({ ...prev, email: e.target.value }))}
+            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+            placeholder="profesional@ejemplo.com"
+          />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs text-charcoal/60" htmlFor="invite-name">
+            Nombre
+          </label>
+          <input
+            id="invite-name"
+            type="text"
+            required
+            value={invite.full_name}
+            onChange={(e) => setInvite((prev) => ({ ...prev, full_name: e.target.value }))}
+            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+            placeholder="Nombre y apellido"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-charcoal/60" htmlFor="invite-role">
+            Rol
+          </label>
+          <select
+            id="invite-role"
+            value={invite.role}
+            onChange={(e) =>
+              setInvite((prev) => ({ ...prev, role: e.target.value as "owner" | "staff" }))
+            }
+            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal sm:w-auto"
+          >
+            <option value="staff">Staff</option>
+            <option value="owner">Dueña</option>
+          </select>
+        </div>
+        <button
+          type="submit"
+          disabled={inviteBusy}
+          className="rounded-full bg-charcoal px-5 py-2 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {inviteBusy ? "Invitando..." : "Invitar"}
+        </button>
+      </form>
+      {inviteError && <p className="mt-2 text-sm text-red-600">{inviteError}</p>}
+      {inviteSent && <p className="mt-2 text-sm text-green-700">{inviteSent}</p>}
+
       {loading && <p className="mt-6 text-sm text-charcoal/50">Cargando...</p>}
 
       <div className="mt-6 flex flex-col gap-4">

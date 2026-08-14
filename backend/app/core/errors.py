@@ -66,3 +66,11 @@ class ConflictError(BookingError):
 
     status_code = 409
     code = "conflict"
+
+
+class UpstreamError(BookingError):
+    """Falló un servicio externo del que dependemos (ej. Admin API de
+    Supabase Auth). No es error del cliente ni de nuestra base."""
+
+    status_code = 502
+    code = "upstream_error"

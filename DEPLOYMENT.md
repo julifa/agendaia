@@ -21,9 +21,16 @@ ejecute.
 4. Project Settings -> API: copiar `URL`, `anon public key` y el `JWT Secret`.
 5. Authentication -> Providers: habilitar Email (y Google si se quiere, según
    ARCHITECTURE.md).
-6. Dar de alta al primer owner: registrarse normalmente desde el frontend con
-   `role: "owner"` en los metadatos de signup (o insertar el profile a mano y
-   luego promoverlo con `update profiles set role = 'owner' where id = '...'`).
+6. Dar de alta al primer owner de cada salón: como el signup público siempre
+   crea `client` (el backend fuerza esto a nivel de trigger — ver
+   `supabase/migrations/20260814120000_harden_profile_writes.sql` — nadie
+   puede auto-promoverse mandando `role` en el body del signup ni haciendo
+   `update profiles set role = ...` directo vía PostgREST), hace falta un
+   paso manual único: registrarse normalmente desde el frontend y después,
+   con la `service_role` key, `update public.profiles set role = 'owner'
+   where id = '...'`. Una vez que existe ese primer owner, el resto del
+   staff se da de alta desde el panel (`/admin/staff` -> "Invitar"), sin
+   volver a tocar la base a mano.
 
 ## 2. Backend (FastAPI)
 
@@ -69,9 +76,11 @@ estático. Vercel o Netlify detectan Vite automáticamente (build command
 - **CI no publica la imagen todavía.** `.github/workflows/ci.yml` corre tests,
   no hace `docker build`/`push`. Agregar ese paso (y el login al registry
   elegido) cuando se decida el hosting.
-- **Sin panel de administración.** El owner no tiene forma de cargar
-  servicios/horarios desde la UI todavía (los endpoints existen, la pantalla
-  no) — ver `frontend/README.md`.
+- **`backend/Dockerfile` no se probó nunca de punta a punta.** El contenido es
+  correcto por inspección (base `python:3.14-slim`, healthcheck, usuario no
+  root) pero no hay Docker disponible en el entorno donde se escribió este
+  repo hasta ahora — construirla y correrla al menos una vez antes del primer
+  deploy real.
 - **Sin backups verificados.** Supabase hace backups automáticos según el
   plan contratado; vale la pena confirmar la política antes de depender de
   esto en producción.

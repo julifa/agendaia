@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -80,6 +81,21 @@ class StaffServicesUpdate(BaseModel):
     """Reemplaza por completo el conjunto de servicios que presta el profesional."""
 
     service_ids: list[uuid.UUID]
+
+
+class StaffInviteCreate(BaseModel):
+    """Alta de un owner/staff por invitación. Reemplaza el insert manual en
+    Supabase que documentaba `frontend/README.md`."""
+
+    email: str = Field(min_length=3, max_length=320)
+    full_name: str = Field(min_length=1, max_length=200)
+    role: Literal["owner", "staff"]
+
+    @model_validator(mode="after")
+    def _basic_email_shape(self) -> "StaffInviteCreate":
+        if "@" not in self.email or self.email.startswith("@") or self.email.endswith("@"):
+            raise ValueError("email inválido")
+        return self
 
 
 # --- Horarios laborales ------------------------------------------------------

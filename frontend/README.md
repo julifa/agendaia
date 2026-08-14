@@ -46,6 +46,11 @@ sin login real ni llamadas de red).
 ## Cuenta de owner/staff
 
 No hay signup público para roles owner/staff a propósito (el registro del
-sitio público siempre crea clientes). Para dar de alta al dueño o a un
-profesional hoy hace falta insertar el perfil a mano en Supabase — ver
-`../DEPLOYMENT.md`. Una pantalla de invitación es trabajo pendiente.
+sitio público siempre crea clientes, y el backend lo fuerza a nivel de
+trigger — ver `supabase/migrations/20260814120000_harden_profile_writes.sql`).
+Para dar de alta a un profesional o a otro dueño, un owner logueado va a
+`/admin/staff` y usa el formulario "Invitar" (`AdminStaff.tsx`): manda
+`POST /staff/invite`, que crea el usuario en Supabase Auth y le envía un mail
+con un link para poner contraseña; el rol elegido se asigna automáticamente
+al aceptar. El *primer* owner de un salón nuevo (no hay nadie todavía que lo
+invite) sigue necesitando alta manual — ver `../DEPLOYMENT.md`.

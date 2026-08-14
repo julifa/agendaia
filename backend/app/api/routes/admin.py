@@ -25,6 +25,7 @@ from app.schemas.admin import (
     ServiceOut,
     ServiceUpdate,
     StaffActiveUpdate,
+    StaffInviteCreate,
     StaffOut,
     StaffServicesUpdate,
     TimeOffCreate,
@@ -121,6 +122,19 @@ async def list_staff_for_service(
 
 
 # --- Staff -----------------------------------------------------------------
+
+
+@router.post("/staff/invite", response_model=StaffOut, status_code=201)
+async def invite_staff(
+    payload: StaffInviteCreate,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> StaffOut:
+    """Reemplaza el alta manual en Supabase: manda un mail de invitación real.
+    Owner-only a propósito, mismo criterio que `create_service`: un staff no
+    debería poder dar de alta a otro staff/owner."""
+    created = await admin.invite_staff(session, profile.salon_id, payload)
+    return StaffOut.model_validate(created)
 
 
 @router.get("/staff", response_model=list[StaffOut])
