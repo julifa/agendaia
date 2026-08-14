@@ -6,62 +6,76 @@ import { useProfile } from "../hooks/useProfile";
 import { LoginPanel } from "../components/LoginPanel";
 import { BookingFlow } from "../components/BookingFlow";
 import { DecorBackground } from "../components/DecorBackground";
+import { Marquee } from "../components/Marquee";
+import { PolishSwatches } from "../components/PolishSwatches";
 
-function Header({ onLoginClick }: { onLoginClick: () => void }) {
+function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
   const { user, signOut, loading } = useAuth();
   const { profile } = useProfile();
   const isStaff = profile?.role === "owner" || profile?.role === "staff";
 
   return (
-    <header className="mx-auto flex max-w-md items-start justify-between">
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-champagne">
-          Estudio de manicura
-        </p>
-        <h1 className="mt-1 font-display text-[2.75rem] font-semibold leading-[0.95] tracking-tight text-charcoal">
-          MC Nails
-          <br />
-          Studio
-        </h1>
-        <div className="mt-4 flex items-center gap-2.5">
-          <span className="h-px w-7 bg-champagne" />
-          <p className="text-sm text-charcoal/55">Reservá tu turno en segundos</p>
-        </div>
-      </div>
+    <div className="sticky top-0 z-20 border-b border-charcoal/8 bg-soft-white/80 backdrop-blur-lg">
+      <div className="mx-auto flex max-w-md items-center justify-between px-5 py-3 sm:px-6">
+        <span className="font-display text-base font-semibold tracking-tight text-charcoal">
+          MC Nails Studio
+        </span>
 
-      {!loading && (
-        <div className="flex flex-col items-end gap-2 pt-1 text-sm">
-          {isStaff && (
-            <Link
-              to="/admin"
-              className="text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
-            >
-              Panel del salón
-            </Link>
-          )}
-          {user ? (
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
-            >
-              Cerrar sesión
-            </button>
-          ) : (
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              type="button"
-              onClick={onLoginClick}
-              className="rounded-full border border-charcoal/15 px-4 py-1.5 text-xs font-medium text-charcoal/70
-                transition-colors hover:border-champagne hover:text-champagne"
-            >
-              Iniciar sesión
-            </motion.button>
-          )}
-        </div>
-      )}
-    </header>
+        {!loading && (
+          <div className="flex items-center gap-3 text-xs">
+            {isStaff && (
+              <Link
+                to="/admin"
+                className="text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
+              >
+                Panel del salón
+              </Link>
+            )}
+            {user ? (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
+              >
+                Cerrar sesión
+              </button>
+            ) : (
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                type="button"
+                onClick={onLoginClick}
+                className="rounded-full border border-charcoal/15 px-3.5 py-1.5 font-medium text-charcoal/70
+                  transition-colors hover:border-champagne hover:text-champagne"
+              >
+                Iniciar sesión
+              </motion.button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Hero() {
+  return (
+    <div className="mx-auto max-w-md px-5 pb-8 pt-10 text-center sm:px-6">
+      <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-champagne">
+        Estudio de manicura · NYC style
+      </p>
+      <h1 className="mt-3 font-display text-[2.6rem] leading-[0.98] tracking-tight text-charcoal">
+        Uñas lindas,
+        <br />
+        <span className="italic text-champagne">a tu manera.</span>
+      </h1>
+      <p className="mx-auto mt-4 max-w-[26rem] text-sm text-charcoal/55">
+        Reservá tu turno en segundos — sin vueltas, sin necesidad de crear una cuenta.
+      </p>
+      <div className="mt-5 flex justify-center">
+        <PolishSwatches />
+      </div>
+    </div>
   );
 }
 
@@ -69,12 +83,14 @@ export function PublicSite() {
   const [showLogin, setShowLogin] = useState(false);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-soft-white px-5 py-14 sm:px-6 sm:py-20">
+    <main className="relative min-h-screen overflow-hidden bg-soft-white">
       <DecorBackground />
 
-      <Header onLoginClick={() => setShowLogin(true)} />
+      <TopBar onLoginClick={() => setShowLogin(true)} />
+      <Hero />
+      <Marquee />
 
-      <div className="mx-auto mt-10 max-w-md">
+      <div className="mx-auto max-w-md px-5 pb-16 pt-8 sm:px-6">
         <AnimatePresence>
           {showLogin && (
             <motion.div

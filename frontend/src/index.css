@@ -71,3 +71,27 @@ body {
   stroke-dashoffset: 48;
   animation: draw-check 0.5s 0.2s cubic-bezier(0.65, 0, 0.35, 1) forwards;
 }
+
+/* Marquee tipo Chillhouse/Paintbox: una cinta de texto en loop infinito.
+   El contenido se duplica en el JSX y esto desliza exactamente la mitad,
+   así el loop es perfectamente continuo sin salto visible. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 26s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}

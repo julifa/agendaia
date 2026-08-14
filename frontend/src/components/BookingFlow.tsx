@@ -491,11 +491,26 @@ export function BookingFlow() {
               type="button"
               disabled={submitting || (!user && (!guestFirstName.trim() || !guestLastName.trim()))}
               onClick={handleSubmit}
-              className="mt-5 w-full rounded-full bg-champagne py-3.5 text-sm font-medium tracking-wide text-white
-                transition-opacity disabled:opacity-40"
+              className="group mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-champagne py-3.5
+                text-sm font-medium tracking-wide text-white transition-opacity disabled:opacity-40"
               style={{ boxShadow: submitting ? "none" : "var(--shadow-glow)" }}
             >
               {submitting ? "Reservando..." : "Confirmar reserva"}
+              {!submitting && (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
+                  fill="none"
+                >
+                  <path
+                    d="M5 12h14M13 6l6 6-6 6"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
             </motion.button>
           </motion.section>
         )}
