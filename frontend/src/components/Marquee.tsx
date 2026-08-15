@@ -4,7 +4,8 @@ const ITEMS = ["Manicura", "Pedicura", "Nail Art", "Spa de manos", "Cuidado prof
  * Cinta de texto en loop infinito — el mismo recurso que usan Chillhouse o
  * Paintbox para reforzar marca sin depender de fotografía. El contenido se
  * duplica; la animación desliza exactamente la mitad del ancho total, así
- * el loop no se nota.
+ * el loop no se nota. Separador: un punto discreto, no un sparkle — repetido
+ * cada palabra el motivo de estrella lee "recargado" en vez de editorial.
  */
 export function Marquee() {
   const content = (
@@ -14,7 +15,7 @@ export function Marquee() {
           <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-charcoal/45">
             {item}
           </span>
-          <span className="text-champagne">✦</span>
+          <span className="h-[3px] w-[3px] rounded-full bg-champagne/60" />
         </span>
       ))}
     </span>

@@ -11,7 +11,6 @@ import { InstagramIcon } from "../components/InstagramIcon";
 import { Logo, Monogram } from "../components/Logo";
 import { Marquee } from "../components/Marquee";
 import { PolishSwatches } from "../components/PolishSwatches";
-import { Sparkle } from "../components/Sparkle";
 import { Welcome } from "../components/Welcome";
 
 function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
@@ -68,18 +67,16 @@ function Hero() {
         <Monogram className="h-12 w-12" />
       </div>
 
-      <p className="mt-4 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.3em] text-champagne">
-        <Sparkle className="h-3 w-3" />
+      <p className="mt-4 text-[11px] font-medium uppercase tracking-[0.35em] text-champagne">
         MC Nails Studio
-        <Sparkle className="h-3 w-3" />
       </p>
       <h1 className="mt-3 font-display text-[2.6rem] leading-[0.98] tracking-tight text-charcoal">
-        Uñas lindas,
+        Uñas impecables,
         <br />
-        <span className="italic text-champagne">a tu manera.</span>
+        <span className="italic text-champagne">a tu medida.</span>
       </h1>
       <p className="mx-auto mt-4 max-w-[26rem] text-sm text-charcoal/55">
-        Reservá tu turno en segundos — sin vueltas, sin necesidad de crear una cuenta.
+        Reservá tu turno en minutos, sin vueltas ni necesidad de crear una cuenta.
       </p>
       <div className="mt-5 flex justify-center">
         <PolishSwatches />

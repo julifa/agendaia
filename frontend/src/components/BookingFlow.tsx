@@ -477,8 +477,8 @@ export function BookingFlow() {
                 }`}
                 style={{
                   boxShadow: isSelected
-                    ? "0 10px 24px -12px rgba(212, 175, 55, 0.4)"
-                    : "0 1px 2px rgba(74, 74, 74, 0.03)",
+                    ? "0 10px 24px -12px rgba(189, 154, 86, 0.4)"
+                    : "0 1px 2px rgba(58, 51, 46, 0.04)",
                 }}
               >
                 <motion.span

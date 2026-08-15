@@ -5,11 +5,11 @@
  * nunca se reutilizan como color funcional en la UI.
  */
 const SWATCHES = [
-  "#f8c8dc", // baby-pink
-  "#d4af37", // champagne
-  "#e8b4bc", // rosa mauve, variación
-  "#fff5f7", // soft-white
-  "#c9a0a8", // taupe rosado
+  "#ddb2b9", // baby-pink
+  "#bd9a56", // champagne
+  "#a97e83", // mauve profundo
+  "#faf6f1", // soft-white
+  "#8f7768", // taupe cálido
 ];
 
 export function PolishSwatches() {
@@ -22,7 +22,7 @@ export function PolishSwatches() {
           style={{
             backgroundColor: color,
             zIndex: SWATCHES.length - i,
-            boxShadow: "0 3px 8px -2px rgba(74, 74, 74, 0.25)",
+            boxShadow: "0 3px 8px -2px rgba(58, 51, 46, 0.28)",
           }}
         />
       ))}
