@@ -508,26 +508,28 @@ async def confirm_mercadopago_payment(session: AsyncSession, payment_id: str) ->
         await transition_status(session, appointment.id, AppointmentStatus.confirmed)
 
 
-async def mark_payment_received(
-    session: AsyncSession, appointment_id: uuid.UUID
+async def set_payment_status(
+    session: AsyncSession, appointment_id: uuid.UUID, payment_status: PaymentStatus
 ) -> Appointment:
-    """Confirma a mano la seña de un turno (transferencia verificada por el
-    salón contra su resumen bancario — no hay forma automática de saber que
-    llegó, a diferencia del webhook de Mercado Pago).
+    """Fija a mano el estado de la seña de un turno (transferencia verificada
+    -o desmarcada por error- contra el resumen bancario del salón — no hay
+    forma automática de saberlo, a diferencia del webhook de Mercado Pago).
 
-    Idempotente: si ya estaba 'paid', no hace nada. Mismo criterio que
-    `confirm_mercadopago_payment` para pasar el turno a 'confirmed' si
-    seguía 'pending'.
+    Idempotente. Solo marcar 'paid' tiene efecto sobre el turno (lo confirma
+    si seguía 'pending', mismo criterio que `confirm_mercadopago_payment`):
+    deshacer un pago no revierte el turno, son cosas separadas — si ya se
+    avisó al cliente que quedó confirmado, no tiene sentido volver atrás solo
+    porque se corrige un tilde en la seña.
     """
     appointment = await get_booking(session, appointment_id)
-    if appointment.payment_status is PaymentStatus.paid:
+    if appointment.payment_status is payment_status:
         return appointment
 
-    appointment.payment_status = PaymentStatus.paid
+    appointment.payment_status = payment_status
     await session.commit()
     await session.refresh(appointment)
 
-    if appointment.status is AppointmentStatus.pending:
+    if payment_status is PaymentStatus.paid and appointment.status is AppointmentStatus.pending:
         return await transition_status(
             session, appointment.id, AppointmentStatus.confirmed
         )

@@ -68,6 +68,10 @@ class BookingStatusUpdate(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class PaymentStatusUpdate(BaseModel):
+    payment_status: PaymentStatus
+
+
 class BookingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPatch, apiPost, ApiError } from "../lib/api";
-import type { ApiBooking, ApiPublicStaff, ApiService, ApiStaff } from "../types/api";
+import type { ApiBooking, ApiPublicStaff, ApiService, ApiStaff, PaymentStatus } from "../types/api";
 import type { AppointmentStatus } from "../types/booking";
 
 const timeFormatter = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" });
@@ -21,6 +21,18 @@ const STATUS_STYLE: Record<AppointmentStatus, string> = {
   completed: "bg-charcoal/10 text-charcoal/70",
   cancelled: "bg-charcoal/5 text-charcoal/40 line-through",
   no_show: "bg-charcoal/5 text-charcoal/40",
+};
+
+const PAYMENT_LABEL: Record<PaymentStatus, string> = {
+  unpaid: "Sin seña",
+  pending: "Seña sin confirmar",
+  paid: "Seña recibida",
+};
+
+const PAYMENT_STYLE: Record<PaymentStatus, string> = {
+  unpaid: "bg-charcoal/5 text-charcoal/40",
+  pending: "bg-red-50 text-red-600",
+  paid: "bg-green-50 text-green-700",
 };
 
 function todayISODate(): string {
@@ -94,13 +106,13 @@ export function AdminDashboard() {
     }
   }
 
-  async function markPaymentReceived(id: string) {
+  async function setPaymentStatus(id: string, paymentStatus: PaymentStatus) {
     setBusyId(id);
     try {
-      await apiPost(`/bookings/${id}/payment-received`, {});
+      await apiPatch(`/bookings/${id}/payment-status`, { payment_status: paymentStatus });
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo marcar la seña como recibida");
+      setError(err instanceof ApiError ? err.message : "No se pudo actualizar la seña");
     } finally {
       setBusyId(null);
     }
@@ -160,18 +172,27 @@ export function AdminDashboard() {
                 {STATUS_LABEL[booking.status]}
               </span>
 
-              {booking.payment_status === "pending" && (
-                <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600">
-                  Seña sin confirmar
-                </span>
-              )}
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${PAYMENT_STYLE[booking.payment_status]}`}
+              >
+                {PAYMENT_LABEL[booking.payment_status]}
+              </span>
 
               <div className="flex gap-2">
-                {booking.payment_status === "pending" && (
+                {booking.payment_status === "paid" ? (
                   <button
                     type="button"
                     disabled={isBusy}
-                    onClick={() => void markPaymentReceived(booking.id)}
+                    onClick={() => void setPaymentStatus(booking.id, "pending")}
+                    className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                  >
+                    Deshacer seña recibida
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => void setPaymentStatus(booking.id, "paid")}
                     className="rounded-full bg-champagne px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     Marcar seña recibida

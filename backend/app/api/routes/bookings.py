@@ -17,6 +17,7 @@ from app.schemas.booking import (
     BookingOut,
     BookingReschedule,
     BookingStatusUpdate,
+    PaymentStatusUpdate,
     SlotOut,
 )
 from app.services import availability, bookings
@@ -240,18 +241,22 @@ async def update_status(
     return BookingOut.model_validate(updated)
 
 
-@router.post("/bookings/{appointment_id}/payment-received", response_model=BookingOut)
-async def mark_payment_received(
+@router.patch("/bookings/{appointment_id}/payment-status", response_model=BookingOut)
+async def update_payment_status(
     appointment_id: uuid.UUID,
+    payload: PaymentStatusUpdate,
     profile: Profile = Depends(require_roles(*_STAFF_ROLES)),
     session: AsyncSession = Depends(get_session),
 ) -> BookingOut:
-    """Confirmar a mano que la seña (transferencia) llegó. Reservado al salón:
-    no hay forma automática de saberlo, alguien lo tiene que chequear contra
-    el resumen bancario y marcarlo."""
+    """Fijar a mano el estado de la seña (transferencia) de un turno —
+    marcarla recibida, o deshacerlo si fue un error. Reservado al salón: no
+    hay forma automática de saberlo, alguien lo tiene que chequear contra el
+    resumen bancario."""
     appointment = await bookings.get_booking(session, appointment_id)
     _authorize_access(profile, appointment)
-    updated = await bookings.mark_payment_received(session, appointment_id)
+    updated = await bookings.set_payment_status(
+        session, appointment_id, payload.payment_status
+    )
     return BookingOut.model_validate(updated)
 
 

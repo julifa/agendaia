@@ -774,7 +774,7 @@ async def test_webhook_turno_inexistente_no_rompe(patched, monkeypatch):
     assert session.commit_calls == 0
 
 
-# --- mark_payment_received (transferencia confirmada a mano) ------------------
+# --- set_payment_status (transferencia confirmada/desmarcada a mano) ----------
 
 
 @pytest.mark.asyncio
@@ -785,7 +785,7 @@ async def test_marcar_seña_recibida_confirma_el_turno(patched):
     session = FakeSession()
     session.get_map[(bookings.Appointment, appt.id)] = appt
 
-    result = await bookings.mark_payment_received(session, appt.id)
+    result = await bookings.set_payment_status(session, appt.id, PaymentStatus.paid)
 
     assert result.payment_status == PaymentStatus.paid
     assert result.status == AppointmentStatus.confirmed
@@ -800,8 +800,26 @@ async def test_marcar_seña_recibida_es_idempotente(patched):
     session = FakeSession()
     session.get_map[(bookings.Appointment, appt.id)] = appt
 
-    result = await bookings.mark_payment_received(session, appt.id)
+    result = await bookings.set_payment_status(session, appt.id, PaymentStatus.paid)
 
     assert result.payment_status == PaymentStatus.paid
     assert session.commit_calls == 0
+    assert patched["notified"] == []
+
+
+@pytest.mark.asyncio
+async def test_desmarcar_seña_no_revierte_el_turno_confirmado(patched):
+    """Deshacer un pago corrige solo la seña, no el turno -- si ya se avisó
+    al cliente que quedó confirmado, no tiene sentido volver atrás por un
+    error de tipeo en la seña."""
+    appt = make_appointment(
+        status=AppointmentStatus.confirmed, payment_status=PaymentStatus.paid
+    )
+    session = FakeSession()
+    session.get_map[(bookings.Appointment, appt.id)] = appt
+
+    result = await bookings.set_payment_status(session, appt.id, PaymentStatus.pending)
+
+    assert result.payment_status == PaymentStatus.pending
+    assert result.status == AppointmentStatus.confirmed
     assert patched["notified"] == []

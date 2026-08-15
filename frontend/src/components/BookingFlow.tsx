@@ -146,18 +146,76 @@ function BackLink({ onClick, children }: { onClick: () => void; children: ReactN
   );
 }
 
+function CopyIcon({ copied }: { copied: boolean }) {
+  if (copied) {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-champagne" fill="none">
+        <path
+          d="M5 13l4 4L19 7"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-charcoal/35" fill="none">
+      <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth={1.8} />
+      <path
+        d="M5 15V6a2 2 0 0 1 2-2h9"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Todo el renglón es tappeable (no solo el ícono) — copia el valor de esa
+ * fila puntual al portapapeles, con un check momentáneo de feedback. */
+function CopyableField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API puede fallar (permisos, contexto no seguro); el valor
+      // sigue visible en pantalla para copiarlo a mano.
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="flex w-full items-center justify-between gap-2 rounded-lg py-1 text-left transition-colors hover:bg-champagne/10 active:bg-champagne/15"
+    >
+      <span>
+        <span className="text-charcoal/45">{label}:</span>{" "}
+        <span className="font-medium text-charcoal">{value}</span>
+      </span>
+      {copied ? (
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-champagne">
+          Copiado <CopyIcon copied />
+        </span>
+      ) : (
+        <CopyIcon copied={false} />
+      )}
+    </button>
+  );
+}
+
 function TransferDetails() {
   return (
-    <div className="mt-2 flex flex-col gap-1 text-sm text-charcoal/75">
-      <p>
-        <span className="text-charcoal/45">Alias:</span>{" "}
-        <span className="font-medium text-charcoal">{TRANSFER_ALIAS}</span>
-      </p>
-      <p>
-        <span className="text-charcoal/45">CVU:</span>{" "}
-        <span className="font-medium text-charcoal">{TRANSFER_CVU}</span>
-      </p>
-      <p>
+    <div className="mt-2 flex flex-col text-sm text-charcoal/75">
+      <CopyableField label="Alias" value={TRANSFER_ALIAS} />
+      <CopyableField label="CVU" value={TRANSFER_CVU} />
+      <p className="py-1">
         <span className="text-charcoal/45">Titular:</span>{" "}
         <span className="font-medium text-charcoal">{TRANSFER_NAME}</span>
       </p>
