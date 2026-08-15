@@ -94,6 +94,18 @@ export function AdminDashboard() {
     }
   }
 
+  async function markPaymentReceived(id: string) {
+    setBusyId(id);
+    try {
+      await apiPost(`/bookings/${id}/payment-received`, {});
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo marcar la seña como recibida");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -148,7 +160,23 @@ export function AdminDashboard() {
                 {STATUS_LABEL[booking.status]}
               </span>
 
+              {booking.payment_status === "pending" && (
+                <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600">
+                  Seña sin confirmar
+                </span>
+              )}
+
               <div className="flex gap-2">
+                {booking.payment_status === "pending" && (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => void markPaymentReceived(booking.id)}
+                    className="rounded-full bg-champagne px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    Marcar seña recibida
+                  </button>
+                )}
                 {booking.status === "pending" && (
                   <button
                     type="button"

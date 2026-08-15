@@ -32,7 +32,7 @@ export interface ApiAvailability {
   slots: ApiSlot[];
 }
 
-export type PaymentMethod = "cash" | "mercadopago";
+export type PaymentMethod = "cash" | "mercadopago" | "transfer";
 export type PaymentStatus = "unpaid" | "pending" | "paid";
 
 export interface ApiBooking {

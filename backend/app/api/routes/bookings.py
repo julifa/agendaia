@@ -240,6 +240,21 @@ async def update_status(
     return BookingOut.model_validate(updated)
 
 
+@router.post("/bookings/{appointment_id}/payment-received", response_model=BookingOut)
+async def mark_payment_received(
+    appointment_id: uuid.UUID,
+    profile: Profile = Depends(require_roles(*_STAFF_ROLES)),
+    session: AsyncSession = Depends(get_session),
+) -> BookingOut:
+    """Confirmar a mano que la seña (transferencia) llegó. Reservado al salón:
+    no hay forma automática de saberlo, alguien lo tiene que chequear contra
+    el resumen bancario y marcarlo."""
+    appointment = await bookings.get_booking(session, appointment_id)
+    _authorize_access(profile, appointment)
+    updated = await bookings.mark_payment_received(session, appointment_id)
+    return BookingOut.model_validate(updated)
+
+
 @router.post("/bookings/{appointment_id}/reschedule", response_model=BookingOut)
 async def reschedule_booking(
     appointment_id: uuid.UUID,

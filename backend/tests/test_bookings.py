@@ -617,7 +617,7 @@ async def test_efectivo_congela_el_monto_de_sena_sin_llamar_a_mercadopago(
 
     assert appointment.payment_method == PaymentMethod.cash
     assert appointment.deposit_amount == Decimal("8500")
-    assert appointment.payment_status == PaymentStatus.unpaid
+    assert appointment.payment_status == PaymentStatus.pending
     assert appointment.status == AppointmentStatus.pending
     assert appointment.mp_init_point is None
     assert session.commit_calls == 1
@@ -687,7 +687,7 @@ async def test_mercadopago_si_falla_la_preferencia_el_turno_igual_queda_reservad
     appointment = await bookings.create_booking(session, request, now=NOW)
 
     assert appointment.status == AppointmentStatus.pending
-    assert appointment.payment_status == PaymentStatus.unpaid
+    assert appointment.payment_status == PaymentStatus.pending
     assert appointment.mp_init_point is None
     assert session.commit_calls == 1  # solo el INSERT; no se guardó preferencia
 
@@ -772,3 +772,36 @@ async def test_webhook_turno_inexistente_no_rompe(patched, monkeypatch):
     await bookings.confirm_mercadopago_payment(session, "pay-4")
 
     assert session.commit_calls == 0
+
+
+# --- mark_payment_received (transferencia confirmada a mano) ------------------
+
+
+@pytest.mark.asyncio
+async def test_marcar_seña_recibida_confirma_el_turno(patched):
+    appt = make_appointment(
+        status=AppointmentStatus.pending, payment_status=PaymentStatus.pending
+    )
+    session = FakeSession()
+    session.get_map[(bookings.Appointment, appt.id)] = appt
+
+    result = await bookings.mark_payment_received(session, appt.id)
+
+    assert result.payment_status == PaymentStatus.paid
+    assert result.status == AppointmentStatus.confirmed
+    assert patched["notified"] == [("booking.confirmed", {"reason": None})]
+
+
+@pytest.mark.asyncio
+async def test_marcar_seña_recibida_es_idempotente(patched):
+    appt = make_appointment(
+        status=AppointmentStatus.confirmed, payment_status=PaymentStatus.paid
+    )
+    session = FakeSession()
+    session.get_map[(bookings.Appointment, appt.id)] = appt
+
+    result = await bookings.mark_payment_received(session, appt.id)
+
+    assert result.payment_status == PaymentStatus.paid
+    assert session.commit_calls == 0
+    assert patched["notified"] == []

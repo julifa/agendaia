@@ -13,6 +13,13 @@ const SALON_ID = import.meta.env.VITE_SALON_ID;
 // público que exponga el monto configurado antes de reservar.
 const DEPOSIT_AMOUNT = 8500;
 
+// Única forma de pagar la seña: transferencia directa (sin pasarela). El
+// salón confirma el turno a mano al ver la transferencia en su banco — ver
+// POST /bookings/{id}/payment-received en el panel de administración.
+const TRANSFER_ALIAS = "martu.manicura";
+const TRANSFER_CVU = "0000003100008080724270";
+const TRANSFER_NAME = "Martina Yael Carballo";
+
 const depositFormatter = new Intl.NumberFormat("es-AR", {
   style: "currency",
   currency: "ARS",
@@ -84,45 +91,6 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** Escapa texto para un campo de contenido ICS (RFC 5545 §3.3.11). */
-function icsEscape(text: string): string {
-  return text.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
-}
-
-function icsDate(iso: string): string {
-  return new Date(iso).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-}
-
-/** Descarga un .ics con el turno, para sumarlo al calendario del cliente
- * (Google/Apple/Outlook lo importan solo). No manda ningún email — es un
- * archivo generado en el navegador, no requiere backend. */
-function downloadBookingIcs(booking: ApiBooking, serviceName: string) {
-  const ics = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//MC Nails Studio//Turnos//ES",
-    "BEGIN:VEVENT",
-    `UID:${booking.id}@mcnailsstudio`,
-    `DTSTAMP:${icsDate(new Date().toISOString())}`,
-    `DTSTART:${icsDate(booking.start_time)}`,
-    `DTEND:${icsDate(booking.end_time)}`,
-    `SUMMARY:${icsEscape(`${serviceName} — MC Nails Studio`)}`,
-    `DESCRIPTION:${icsEscape("Tu turno en MC Nails Studio.")}`,
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ].join("\r\n");
-
-  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "turno-mc-nails-studio.ics";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
 function currentStepIndex(hasService: boolean, hasSlot: boolean): number {
   if (!hasService) return 0;
   if (!hasSlot) return 1;
@@ -178,6 +146,25 @@ function BackLink({ onClick, children }: { onClick: () => void; children: ReactN
   );
 }
 
+function TransferDetails() {
+  return (
+    <div className="mt-2 flex flex-col gap-1 text-sm text-charcoal/75">
+      <p>
+        <span className="text-charcoal/45">Alias:</span>{" "}
+        <span className="font-medium text-charcoal">{TRANSFER_ALIAS}</span>
+      </p>
+      <p>
+        <span className="text-charcoal/45">CVU:</span>{" "}
+        <span className="font-medium text-charcoal">{TRANSFER_CVU}</span>
+      </p>
+      <p>
+        <span className="text-charcoal/45">Titular:</span>{" "}
+        <span className="font-medium text-charcoal">{TRANSFER_NAME}</span>
+      </p>
+    </div>
+  );
+}
+
 export function BookingFlow() {
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -206,24 +193,14 @@ export function BookingFlow() {
   const [guestPhone, setGuestPhone] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const guestFullName = `${guestFirstName.trim()} ${guestLastName.trim()}`.trim();
-  // Email para la descarga automática del .ics en la confirmación: del
-  // invitado si lo cargó, o el del profile si ya está logueado como cliente.
-  const calendarEmail = bookingAsGuest ? guestEmail.trim() : (user?.email ?? "");
-
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "mercadopago" | null>(null);
+  // El backend solo manda el mail con el turno adjunto para reservas de
+  // invitado con email cargado (ver app/services/email.py) — clientes
+  // logueados todavía no, por eso no se usa el email del profile acá.
+  const willEmailCalendarInvite = bookingAsGuest && guestEmail.trim() !== "";
 
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<ApiBooking | null>(null);
-  const [mpUnavailable, setMpUnavailable] = useState(false);
-
-  // Mercado Pago vuelve acá con `?pago=exito|pendiente|error` (ver back_urls
-  // en app/services/payments.py). El turno ya fue creado antes del redirect;
-  // esta pantalla es solo informativa, no requiere volver a consultar nada.
-  const [paymentReturn] = useState(() =>
-    new URLSearchParams(window.location.search).get("pago"),
-  );
-  const [paymentReturnDismissed, setPaymentReturnDismissed] = useState(false);
 
   const selectedService = useMemo(
     () => services.find((s) => s.id === selectedServiceId) ?? null,
@@ -282,7 +259,7 @@ export function BookingFlow() {
   }
 
   async function handleSubmit() {
-    if (!selectedService || !selectedSlot || !paymentMethod) return;
+    if (!selectedService || !selectedSlot) return;
     setFormError(null);
     setSubmitting(true);
     try {
@@ -293,25 +270,9 @@ export function BookingFlow() {
         guest_name: bookingAsGuest ? guestFullName : undefined,
         guest_phone: bookingAsGuest ? guestPhone.trim() : undefined,
         guest_email: bookingAsGuest ? guestEmail.trim() || undefined : undefined,
-        payment_method: paymentMethod,
+        payment_method: "transfer",
       });
 
-      // Se dispara sola si cargó email — no manda nada por afuera, es un
-      // .ics generado en el navegador. Va antes del posible redirect a
-      // Mercado Pago para que también aplique a ese flujo.
-      if (calendarEmail) {
-        downloadBookingIcs(booking, selectedService.name);
-      }
-
-      if (booking.payment_method === "mercadopago" && booking.mp_init_point) {
-        // Redirect de página completa: Checkout Pro de Mercado Pago vive
-        // afuera de esta SPA. Vuelve a `/?pago=...` (ver back_urls en
-        // app/services/payments.py), donde este mismo componente muestra el
-        // aviso de retorno.
-        window.location.href = booking.mp_init_point;
-        return;
-      }
-      setMpUnavailable(booking.payment_method === "mercadopago" && !booking.mp_init_point);
       setConfirmed(booking);
     } catch (err) {
       if (err instanceof ApiError && err.code === "slot_unavailable") {
@@ -328,57 +289,12 @@ export function BookingFlow() {
 
   function reset() {
     setConfirmed(null);
-    setMpUnavailable(false);
     setSelectedSlot(null);
-    setPaymentMethod(null);
     setGuestFirstName("");
     setGuestLastName("");
     setGuestPhone("");
     setGuestEmail("");
     void refreshSlots();
-  }
-
-  if (paymentReturn && !paymentReturnDismissed) {
-    const copy: Record<string, { title: string; body: string }> = {
-      exito: {
-        title: "¡Pago recibido!",
-        body: "Ya registramos tu seña. En breve te confirmamos el turno por WhatsApp.",
-      },
-      pendiente: {
-        title: "Pago en proceso",
-        body: "Tu pago está siendo procesado. Te confirmamos el turno por WhatsApp apenas se acredite.",
-      },
-      error: {
-        title: "El pago no se completó",
-        body: "Tu turno quedó reservado igual. Escribinos por WhatsApp para coordinar la seña o volver a intentar el pago.",
-      },
-    };
-    const { title, body } = copy[paymentReturn] ?? copy.pendiente;
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="text-center"
-      >
-        <p className="font-display text-xl text-charcoal">{title}</p>
-        <p className="mx-auto mt-2 max-w-sm text-sm text-charcoal/55">{body}</p>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          type="button"
-          onClick={() => {
-            window.history.replaceState({}, "", window.location.pathname);
-            setPaymentReturnDismissed(true);
-          }}
-          className="mt-6 rounded-full border border-charcoal/15 px-5 py-2.5 text-sm text-charcoal/60
-            transition-colors hover:border-charcoal/30 hover:text-charcoal"
-        >
-          Volver a la reserva
-        </motion.button>
-      </motion.div>
-    );
   }
 
   if (confirmed && selectedService) {
@@ -423,20 +339,19 @@ export function BookingFlow() {
           )}
         />
 
-        {confirmed.payment_method === "cash" && (
-          <p className="mt-4 text-center text-sm text-charcoal/55">
-            Recordá abonar la seña de {depositFormatter.format(DEPOSIT_AMOUNT)} en el salón.
+        <div className="mt-4 rounded-2xl border border-champagne/25 bg-champagne/[0.06] px-4 py-3.5">
+          <p className="text-sm text-charcoal/75">
+            Para confirmar tu turno, transferí la seña de{" "}
+            <span className="font-medium text-charcoal">
+              {depositFormatter.format(DEPOSIT_AMOUNT)}
+            </span>{" "}
+            a:
           </p>
-        )}
-        {mpUnavailable && (
-          <p className="mt-4 text-center text-sm text-red-600">
-            Tu turno quedó reservado, pero no pudimos generar el link de pago. Te vamos a
-            contactar para coordinar la seña.
-          </p>
-        )}
-        {calendarEmail && (
+          <TransferDetails />
+        </div>
+        {willEmailCalendarInvite && (
           <p className="mt-4 text-center text-sm text-charcoal/55">
-            Te descargamos un archivo para sumar el turno a tu calendario.
+            Te mandamos un mail con el turno para que lo sumes a tu calendario.
           </p>
         )}
 
@@ -697,43 +612,15 @@ export function BookingFlow() {
               </p>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-champagne/25 bg-champagne/[0.06] px-4 py-3">
+            <div className="mt-4 rounded-2xl border border-champagne/25 bg-champagne/[0.06] px-4 py-3.5">
               <p className="text-sm text-charcoal/75">
                 Para reservar se pide una{" "}
                 <span className="font-medium text-charcoal">
                   seña de {depositFormatter.format(DEPOSIT_AMOUNT)}
-                </span>
-                .
+                </span>{" "}
+                por transferencia a:
               </p>
-            </div>
-
-            <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-wide text-charcoal/35">
-              ¿Cómo pagás la seña?
-            </p>
-            <div className="grid grid-cols-2 gap-2.5">
-              {(
-                [
-                  { value: "cash" as const, label: "Efectivo", hint: "En el salón" },
-                  { value: "mercadopago" as const, label: "Mercado Pago", hint: "Ahora, online" },
-                ]
-              ).map((option) => {
-                const isSelected = paymentMethod === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setPaymentMethod(option.value)}
-                    className={`rounded-2xl border px-3.5 py-3 text-left transition-colors duration-200 ${
-                      isSelected
-                        ? "border-champagne/50 bg-champagne/[0.07]"
-                        : "border-charcoal/8 bg-white hover:border-baby-pink"
-                    }`}
-                  >
-                    <p className="font-display text-sm text-charcoal">{option.label}</p>
-                    <p className="mt-0.5 text-[12px] text-charcoal/45">{option.hint}</p>
-                  </button>
-                );
-              })}
+              <TransferDetails />
             </div>
 
             {bookingAsGuest && (
@@ -782,7 +669,6 @@ export function BookingFlow() {
               type="button"
               disabled={
                 submitting ||
-                !paymentMethod ||
                 (bookingAsGuest &&
                   (!guestFirstName.trim() || !guestLastName.trim() || !guestPhone.trim()))
               }
@@ -791,13 +677,7 @@ export function BookingFlow() {
                 text-sm font-medium tracking-wide text-white transition-opacity disabled:opacity-40"
               style={{ boxShadow: submitting ? "none" : "var(--shadow-glow)" }}
             >
-              {submitting
-                ? paymentMethod === "mercadopago"
-                  ? "Redirigiendo a Mercado Pago..."
-                  : "Reservando..."
-                : paymentMethod === "mercadopago"
-                  ? "Pagar seña y reservar"
-                  : "Confirmar reserva"}
+              {submitting ? "Reservando..." : "Confirmar reserva"}
               {!submitting && (
                 <svg
                   viewBox="0 0 24 24"

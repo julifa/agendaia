@@ -46,7 +46,7 @@ from app.db.models import (
     Salon,
     Service,
 )
-from app.services import availability, notifications, payments
+from app.services import availability, email, notifications, payments
 from app.services.availability import SlotTakenLocally
 from app.services.payments import MercadoPagoNotConfigured
 
@@ -259,7 +259,14 @@ async def create_booking(
         notes=request.notes,
         created_by=request.created_by,
         payment_method=request.payment_method,
-        payment_status=PaymentStatus.unpaid,
+        # Con seña elegida arranca 'pending' (transferencia/Mercado Pago
+        # esperando confirmación); sin seña (created_by staff sin política de
+        # seña) arranca 'unpaid', no hay nada que confirmar.
+        payment_status=(
+            PaymentStatus.pending
+            if request.payment_method is not None
+            else PaymentStatus.unpaid
+        ),
         deposit_amount=deposit_amount,
     )
     session.add(appointment)
@@ -279,6 +286,7 @@ async def create_booking(
 
     await session.refresh(appointment)
     await notifications.notify("booking.created", appointment)
+    await email.send_booking_confirmation(appointment, service.name)
     await attach_client_name(session, appointment)
 
     # `mp_init_point` no es una columna: es la URL de checkout que el
@@ -498,6 +506,32 @@ async def confirm_mercadopago_payment(session: AsyncSession, payment_id: str) ->
 
     if appointment.status is AppointmentStatus.pending:
         await transition_status(session, appointment.id, AppointmentStatus.confirmed)
+
+
+async def mark_payment_received(
+    session: AsyncSession, appointment_id: uuid.UUID
+) -> Appointment:
+    """Confirma a mano la seña de un turno (transferencia verificada por el
+    salón contra su resumen bancario — no hay forma automática de saber que
+    llegó, a diferencia del webhook de Mercado Pago).
+
+    Idempotente: si ya estaba 'paid', no hace nada. Mismo criterio que
+    `confirm_mercadopago_payment` para pasar el turno a 'confirmed' si
+    seguía 'pending'.
+    """
+    appointment = await get_booking(session, appointment_id)
+    if appointment.payment_status is PaymentStatus.paid:
+        return appointment
+
+    appointment.payment_status = PaymentStatus.paid
+    await session.commit()
+    await session.refresh(appointment)
+
+    if appointment.status is AppointmentStatus.pending:
+        return await transition_status(
+            session, appointment.id, AppointmentStatus.confirmed
+        )
+    return await attach_client_name(session, appointment)
 
 
 async def reschedule_booking(

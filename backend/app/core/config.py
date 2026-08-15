@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     #: Mercado Pago pueda avisar el pago.
     backend_public_url: str = "http://localhost:8000"
 
+    # Mail de confirmación con el turno adjunto (.ics), vía Resend. Ver
+    # app/services/email.py. Vacío = no-op (mismo criterio que Mercado Pago).
+    resend_api_key: str = ""
+    #: Remitente. "onboarding@resend.dev" funciona sin verificar dominio
+    #: propio — sirve para arrancar, pero Resend lo puede marcar como spam
+    #: más seguido que un dominio propio verificado.
+    resend_from_email: str = "onboarding@resend.dev"
+
     db_echo: bool = False
     cors_origins: list[str] = ["http://localhost:5173"]
 

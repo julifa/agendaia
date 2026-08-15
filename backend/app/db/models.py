@@ -50,6 +50,10 @@ class AppointmentStatus(str, enum.Enum):
 class PaymentMethod(str, enum.Enum):
     cash = "cash"
     mercadopago = "mercadopago"
+    #: Transferencia bancaria directa. Única opción ofrecida en la reserva
+    #: pública desde 20260815100000_transfer_payment_method.sql — 'cash' y
+    #: 'mercadopago' quedan por compatibilidad con turnos históricos.
+    transfer = "transfer"
 
 
 class PaymentStatus(str, enum.Enum):
