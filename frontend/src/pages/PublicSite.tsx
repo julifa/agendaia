@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuthContext";
 import { useProfile } from "../hooks/useProfileContext";
-import { LoginPanel } from "../components/LoginPanel";
 import { BookingFlow } from "../components/BookingFlow";
 import { DecorBackground } from "../components/DecorBackground";
 import { Divider } from "../components/Divider";
@@ -13,7 +12,7 @@ import { Marquee } from "../components/Marquee";
 import { PolishSwatches } from "../components/PolishSwatches";
 import { Welcome } from "../components/Welcome";
 
-function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
+function TopBar() {
   const { user, signOut, loading } = useAuth();
   const { profile } = useProfile();
   const isStaff = profile?.role === "owner" || profile?.role === "staff";
@@ -23,17 +22,15 @@ function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
       <div className="mx-auto flex max-w-md items-center justify-between px-5 py-3 sm:px-6">
         <Logo />
 
-        {!loading && (
+        {!loading && isStaff && (
           <div className="flex items-center gap-3 text-xs">
-            {isStaff && (
-              <Link
-                to="/admin"
-                className="text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
-              >
-                Panel del salón
-              </Link>
-            )}
-            {user ? (
+            <Link
+              to="/admin"
+              className="text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
+            >
+              Panel del salón
+            </Link>
+            {user && (
               <button
                 type="button"
                 onClick={() => void signOut()}
@@ -41,17 +38,6 @@ function TopBar({ onLoginClick }: { onLoginClick: () => void }) {
               >
                 Cerrar sesión
               </button>
-            ) : (
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                type="button"
-                onClick={onLoginClick}
-                className="rounded-full border border-charcoal/15 px-3.5 py-1.5 font-medium text-charcoal/70
-                  transition-colors hover:border-champagne hover:text-champagne"
-              >
-                Iniciar sesión
-              </motion.button>
             )}
           </div>
         )}
@@ -86,7 +72,6 @@ function Hero() {
 }
 
 export function PublicSite() {
-  const [showLogin, setShowLogin] = useState(false);
   // Si Mercado Pago redirige de vuelta acá (`?pago=...`), se salta la
   // pantalla de bienvenida: BookingFlow ya sabe mostrar el aviso de retorno.
   const [entered, setEntered] = useState(() =>
@@ -97,7 +82,7 @@ export function PublicSite() {
     <main className="relative min-h-screen overflow-hidden bg-soft-white">
       <DecorBackground />
 
-      <TopBar onLoginClick={() => setShowLogin(true)} />
+      <TopBar />
 
       <AnimatePresence mode="wait">
         {!entered ? (
@@ -119,20 +104,6 @@ export function PublicSite() {
             <Marquee />
 
             <div className="mx-auto max-w-md px-5 pb-16 pt-8 sm:px-6">
-              <AnimatePresence>
-                {showLogin && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="mb-6 overflow-hidden"
-                  >
-                    <LoginPanel onClose={() => setShowLogin(false)} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
               <Divider className="mb-6" />
 
               <div

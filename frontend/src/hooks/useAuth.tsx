@@ -30,18 +30,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
     },
-    async signUp(email, password, fullName, salonId) {
-      // El trigger `handle_new_user` (ver supabase/migrations) lee estos
-      // metadatos para crear el `profile` correspondiente automáticamente.
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: fullName, salon_id: salonId, role: "client" },
-        },
-      });
-      if (error) throw error;
-    },
     async signOut() {
       await supabase.auth.signOut();
     },

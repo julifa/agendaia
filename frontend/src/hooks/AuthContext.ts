@@ -6,12 +6,6 @@ export interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signInWithPassword: (email: string, password: string) => Promise<void>;
-  signUp: (
-    email: string,
-    password: string,
-    fullName: string,
-    salonId: string,
-  ) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
