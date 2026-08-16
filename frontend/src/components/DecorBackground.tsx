@@ -13,13 +13,13 @@ import { Monogram } from "./Logo";
 export function DecorBackground() {
   return (
     <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
-      <div className="decor-blob -right-32 -top-40 h-[26rem] w-[26rem] bg-baby-pink" />
+      <div className="decor-blob -right-32 -top-40 h-[26rem] w-[26rem] bg-baby-pink lg:-right-48 lg:-top-56 lg:h-[42rem] lg:w-[42rem]" />
       <div
-        className="decor-blob -bottom-32 -left-24 h-96 w-96 bg-champagne/70"
+        className="decor-blob -bottom-32 -left-24 h-96 w-96 bg-champagne/70 lg:-bottom-48 lg:-left-40 lg:h-[34rem] lg:w-[34rem]"
         style={{ animationDelay: "-9s" }}
       />
 
-      <Monogram className="absolute -right-14 top-20 h-72 w-72 -rotate-6 opacity-[0.05] sm:h-[26rem] sm:w-[26rem]" />
+      <Monogram className="absolute -right-14 top-20 h-72 w-72 -rotate-6 opacity-[0.05] sm:h-[26rem] sm:w-[26rem] lg:h-[34rem] lg:w-[34rem]" />
     </div>
   );
 }

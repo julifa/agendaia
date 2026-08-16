@@ -11,21 +11,21 @@ import { Monogram } from "./Logo";
  */
 export function Welcome({ onStart }: { onStart: () => void }) {
   return (
-    <section className="mx-auto flex min-h-[calc(100svh-57px)] max-w-md flex-col items-center justify-center px-6 pb-16 text-center sm:px-8">
+    <section className="mx-auto flex min-h-[calc(100svh-57px)] max-w-md flex-col items-center justify-center px-6 pb-16 text-center sm:px-8 lg:max-w-2xl">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="glow-orb inline-block"
       >
-        <Monogram className="mx-auto h-[4.5rem] w-[4.5rem]" />
+        <Monogram className="mx-auto h-[4.5rem] w-[4.5rem] lg:h-[5.5rem] lg:w-[5.5rem]" />
       </motion.div>
 
       <motion.h1
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.12, ease: "easeOut" }}
-        className="mt-7 font-display text-[3.4rem] italic leading-[0.92] text-charcoal"
+        className="mt-7 font-display text-[3.4rem] italic leading-[0.92] text-charcoal lg:text-[4.6rem]"
       >
         Bienvenida
       </motion.h1>
@@ -43,7 +43,7 @@ export function Welcome({ onStart }: { onStart: () => void }) {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.36, ease: "easeOut" }}
-        className="mx-auto mt-6 max-w-[22rem] text-[15px] leading-relaxed text-charcoal/55"
+        className="mx-auto mt-6 max-w-[22rem] text-[15px] leading-relaxed text-charcoal/55 lg:max-w-[26rem] lg:text-base"
       >
         Tu momento de belleza empieza acá. Elegí tu servicio, tu horario y
         listo — sin vueltas, sin necesidad de crear una cuenta.

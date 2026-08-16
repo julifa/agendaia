@@ -236,6 +236,10 @@ export function BookingFlow() {
   const [services, setServices] = useState<ApiService[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState<string | null>(null);
+  // El backend gratuito "duerme" tras un rato sin uso y tarda unos segundos
+  // en despertar en el primer pedido — sin este aviso, esa espera se lee
+  // como que la página está rota en vez de que está arrancando.
+  const [showSlowHint, setShowSlowHint] = useState(false);
 
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [staffForService, setStaffForService] = useState<ApiPublicStaff[]>([]);
@@ -279,6 +283,15 @@ export function BookingFlow() {
   useEffect(() => {
     loadServices();
   }, [loadServices]);
+
+  useEffect(() => {
+    if (!loadingServices) {
+      setShowSlowHint(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowSlowHint(true), 3500);
+    return () => clearTimeout(timer);
+  }, [loadingServices]);
 
   useEffect(() => {
     if (!selectedServiceId) {
@@ -453,6 +466,17 @@ export function BookingFlow() {
             {[0, 1, 2].map((i) => (
               <div key={i} className="h-[4.5rem] animate-pulse rounded-[1.4rem] bg-charcoal/8" />
             ))}
+            <AnimatePresence>
+              {showSlowHint && (
+                <motion.p
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-1 text-center text-xs text-charcoal/40"
+                >
+                  Estamos preparando todo — puede tardar unos segundos la primera vez.
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
         )}
         {!loadingServices && !servicesError && services.length === 0 && (
