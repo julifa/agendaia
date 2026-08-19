@@ -61,3 +61,43 @@ async def invite_user(email: str, full_name: str, salon_id: uuid.UUID) -> dict:
         )
 
     return response.json()
+
+
+async def delete_user(user_id: uuid.UUID) -> None:
+    """Borra el usuario en Supabase Auth (`DELETE /auth/v1/admin/users/{id}`).
+
+    `profiles.id` referencia `auth.users.id` con `ON DELETE CASCADE`, así que
+    esto se lleva puesto el profile y, en cascada, `staff_services`,
+    `staff_schedule_dates` y `time_off` de ese profesional — sin necesidad de
+    borrarlos a mano desde acá.
+    """
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_key:
+        raise RuntimeError(
+            "SUPABASE_URL / SUPABASE_SERVICE_KEY no están configurados en el backend"
+        )
+
+    url = f"{settings.supabase_url.rstrip('/')}/auth/v1/admin/users/{user_id}"
+    headers = {
+        "apikey": settings.supabase_service_key,
+        "Authorization": f"Bearer {settings.supabase_service_key}",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+            response = await client.delete(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise UpstreamError(
+            "No se pudo contactar el servicio de autenticación"
+        ) from exc
+
+    if response.status_code >= 400 and response.status_code != 404:
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {}
+        detail = str(payload.get("msg") or payload.get("message") or payload)
+        raise UpstreamError(
+            "El servicio de autenticación rechazó el borrado del usuario",
+            detail=detail,
+        )

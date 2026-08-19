@@ -8,6 +8,7 @@ es la única que protege la API.
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import Depends
@@ -18,6 +19,8 @@ from app.core.errors import NotAuthenticated, PermissionDenied
 from app.core.security import InvalidTokenError, decode_access_token
 from app.db.models import Profile, UserRole
 from app.db.session import get_session
+
+logger = logging.getLogger("app")
 
 # auto_error=False en ambas: se traduce el fallo a NotAuthenticated (401) con
 # el mismo formato de error que el resto de la API, en vez del 403 genérico
@@ -52,6 +55,10 @@ async def get_current_profile(
     user_id = _subject_from_token(credentials.credentials)
     profile = await session.get(Profile, user_id)
     if profile is None or not profile.is_active:
+        logger.warning(
+            "auth_profile_lookup_failed",
+            extra={"user_id": str(user_id), "found": profile is not None},
+        )
         raise NotAuthenticated("Perfil inexistente o inactivo")
     return profile
 

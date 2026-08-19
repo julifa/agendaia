@@ -19,8 +19,10 @@ from app.db.models import Profile, Service, TimeOff, UserRole
 from app.db.session import get_session
 from app.schemas.admin import (
     PublicStaffOut,
+    SalonClosureCreate,
+    SalonClosureOut,
     ScheduleBlockOut,
-    ScheduleReplace,
+    ScheduleDateReplace,
     ServiceCreate,
     ServiceOut,
     ServiceUpdate,
@@ -105,6 +107,17 @@ async def deactivate_service(
     return ServiceOut.model_validate(service)
 
 
+@router.delete("/services/{service_id}/permanent", status_code=204)
+async def delete_service_permanently(
+    service_id: uuid.UUID,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Borrado real. 409 si el servicio ya tiene turnos asociados — en ese
+    caso hay que usar `DELETE /services/{id}` (baja lógica) en su lugar."""
+    await admin.delete_service_permanently(session, profile.salon_id, service_id)
+
+
 @router.get("/services/{service_id}/staff", response_model=list[PublicStaffOut])
 async def list_staff_for_service(
     service_id: uuid.UUID,
@@ -159,6 +172,18 @@ async def set_staff_active(
     return StaffOut.model_validate(updated)
 
 
+@router.delete("/staff/{staff_id}/permanent", status_code=204)
+async def delete_staff_permanently(
+    staff_id: uuid.UUID,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Borrado real (incluida la cuenta de Supabase Auth). 409 si el
+    profesional ya tiene turnos asociados — en ese caso hay que usar
+    `PATCH /staff/{id}/active` (desactivar) en su lugar."""
+    await admin.delete_staff_permanently(session, profile.salon_id, staff_id)
+
+
 @router.put("/staff/{staff_id}/services", response_model=list[uuid.UUID])
 async def set_staff_services(
     staff_id: uuid.UUID,
@@ -172,29 +197,38 @@ async def set_staff_services(
 
 
 # --- Horarios laborales --------------------------------------------------
+# Por fecha puntual del calendario (no recurrente semana a semana).
 
 
 @router.get("/staff/{staff_id}/schedule", response_model=list[ScheduleBlockOut])
 async def get_staff_schedule(
     staff_id: uuid.UUID,
+    date_from: dt.date | None = None,
+    date_to: dt.date | None = None,
     profile: Profile = Depends(get_current_profile),
     session: AsyncSession = Depends(get_session),
 ) -> list[ScheduleBlockOut]:
     _require_self_or_owner(profile, staff_id)
-    rows = await admin.get_staff_schedule(session, profile.salon_id, staff_id)
+    rows = await admin.get_staff_schedule(
+        session, profile.salon_id, staff_id, date_from, date_to
+    )
     return [ScheduleBlockOut.model_validate(r) for r in rows]
 
 
-@router.put("/staff/{staff_id}/schedule", response_model=list[ScheduleBlockOut])
-async def replace_staff_schedule(
+@router.put(
+    "/staff/{staff_id}/schedule/{date}", response_model=list[ScheduleBlockOut]
+)
+async def replace_staff_schedule_date(
     staff_id: uuid.UUID,
-    payload: ScheduleReplace,
+    date: dt.date,
+    payload: ScheduleDateReplace,
     profile: Profile = Depends(get_current_profile),
     session: AsyncSession = Depends(get_session),
 ) -> list[ScheduleBlockOut]:
+    """Reemplaza todos los bloques de horario de esa fecha puntual de una vez."""
     _require_self_or_owner(profile, staff_id)
-    rows = await admin.replace_staff_schedule(
-        session, profile.salon_id, staff_id, payload.blocks
+    rows = await admin.replace_staff_schedule_date(
+        session, profile.salon_id, staff_id, date, payload.blocks
     )
     return [ScheduleBlockOut.model_validate(r) for r in rows]
 
@@ -251,3 +285,40 @@ async def delete_time_off(
         )
     _require_self_or_owner(profile, time_off.staff_id)
     await admin.delete_time_off(session, profile.salon_id, time_off_id)
+
+
+# --- Bloqueo de agenda (salón entero) -----------------------------------------
+
+
+@router.get("/salon/closures", response_model=list[SalonClosureOut])
+async def list_salon_closures(
+    date_from: dt.datetime | None = None,
+    date_to: dt.datetime | None = None,
+    profile: Profile = Depends(require_roles(UserRole.owner, UserRole.staff)),
+    session: AsyncSession = Depends(get_session),
+) -> list[SalonClosureOut]:
+    rows = await admin.list_salon_closures(
+        session, profile.salon_id, date_from, date_to
+    )
+    return [SalonClosureOut.model_validate(r) for r in rows]
+
+
+@router.post("/salon/closures", response_model=SalonClosureOut, status_code=201)
+async def create_salon_closure(
+    payload: SalonClosureCreate,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> SalonClosureOut:
+    row = await admin.create_salon_closure(
+        session, profile.salon_id, payload.starts_at, payload.ends_at, payload.reason
+    )
+    return SalonClosureOut.model_validate(row)
+
+
+@router.delete("/salon/closures/{closure_id}", status_code=204)
+async def delete_salon_closure(
+    closure_id: uuid.UUID,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    await admin.delete_salon_closure(session, profile.salon_id, closure_id)

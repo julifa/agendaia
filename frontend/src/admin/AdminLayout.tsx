@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { to: "/admin", label: "Agenda", end: true },
   { to: "/admin/services", label: "Servicios" },
   { to: "/admin/staff", label: "Staff" },
+  { to: "/admin/closures", label: "Bloquear agenda" },
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {

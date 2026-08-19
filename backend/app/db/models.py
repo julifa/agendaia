@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -168,6 +169,13 @@ class StaffService(Base):
 
 
 class StaffSchedule(Base):
+    """Horario semanal recurrente. Deprecado desde
+    20260819120000_staff_schedule_dates_and_closures.sql: el motor de
+    disponibilidad y el admin ya no lo leen ni lo escriben, reemplazado por
+    `StaffScheduleDate` (fecha puntual, no recurrente). Se mantiene la clase
+    y la tabla sin dropear para no perder horarios ya cargados.
+    """
+
     __tablename__ = "staff_schedules"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -184,6 +192,26 @@ class StaffSchedule(Base):
     )
 
 
+class StaffScheduleDate(Base):
+    """Horario laboral anclado a una fecha puntual del calendario (no se
+    repite semana a semana). Fuente de verdad actual del motor de
+    disponibilidad, en reemplazo de `StaffSchedule`."""
+
+    __tablename__ = "staff_schedule_dates"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    salon_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
+    staff_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
+    date: Mapped[dt.date] = mapped_column(Date)
+    start_time: Mapped[dt.time] = mapped_column(Time)
+    end_time: Mapped[dt.time] = mapped_column(Time)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class TimeOff(Base):
     __tablename__ = "time_off"
 
@@ -192,6 +220,25 @@ class TimeOff(Base):
     )
     salon_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
     staff_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
+    starts_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class SalonClosure(Base):
+    """Bloqueo de agenda a nivel salón (feriado, vacaciones): ningún
+    profesional del salón queda disponible durante el rango, sin tener que
+    tocar el horario de cada uno."""
+
+    __tablename__ = "salon_closures"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    salon_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
     starts_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     reason: Mapped[str | None] = mapped_column(Text)

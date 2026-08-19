@@ -99,10 +99,12 @@ class StaffInviteCreate(BaseModel):
 
 
 # --- Horarios laborales ------------------------------------------------------
+#
+# Por fecha puntual del calendario (no recurrente semana a semana). Ver
+# StaffScheduleDate en app/db/models.py.
 
 
 class ScheduleBlockIn(BaseModel):
-    weekday: int = Field(ge=0, le=6, description="0=lunes ... 6=domingo")
     start_time: dt.time
     end_time: dt.time
 
@@ -113,7 +115,9 @@ class ScheduleBlockIn(BaseModel):
         return self
 
 
-class ScheduleReplace(BaseModel):
+class ScheduleDateReplace(BaseModel):
+    """Reemplaza todos los bloques de una fecha puntual de una vez."""
+
     blocks: list[ScheduleBlockIn]
 
 
@@ -121,7 +125,7 @@ class ScheduleBlockOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    weekday: int
+    date: dt.date
     start_time: dt.time
     end_time: dt.time
 
@@ -148,6 +152,33 @@ class TimeOffOut(BaseModel):
 
     id: uuid.UUID
     staff_id: uuid.UUID
+    starts_at: dt.datetime
+    ends_at: dt.datetime
+    reason: str | None
+
+
+# --- Bloqueo de agenda (salón entero) -----------------------------------------
+
+
+class SalonClosureCreate(BaseModel):
+    starts_at: dt.datetime
+    ends_at: dt.datetime
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "SalonClosureCreate":
+        if self.starts_at.tzinfo is None or self.ends_at.tzinfo is None:
+            raise ValueError("starts_at/ends_at deben incluir zona horaria")
+        if self.ends_at <= self.starts_at:
+            raise ValueError("ends_at debe ser posterior a starts_at")
+        return self
+
+
+class SalonClosureOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    salon_id: uuid.UUID
     starts_at: dt.datetime
     ends_at: dt.datetime
     reason: str | None

@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, ResourceNotFound, UpstreamError
 from app.db.models import (
+    Appointment,
     Profile,
+    SalonClosure,
     Service,
-    StaffSchedule,
+    StaffScheduleDate,
     StaffService,
     TimeOff,
     UserRole,
@@ -109,6 +111,29 @@ async def deactivate_service(
     return service
 
 
+async def delete_service_permanently(
+    session: AsyncSession, salon_id: uuid.UUID, service_id: uuid.UUID
+) -> None:
+    """Borrado real. Solo posible si el servicio nunca tuvo turnos (la FK de
+    `appointments` es `ON DELETE RESTRICT`); si tiene historial, se pide
+    desactivarlo en su lugar en vez de dejar que el INSERT/DELETE explote."""
+    service = await _load_service(session, salon_id, service_id)
+
+    has_bookings = (
+        await session.scalar(
+            select(Appointment.id).where(Appointment.service_id == service_id).limit(1)
+        )
+    ) is not None
+    if has_bookings:
+        raise ConflictError(
+            "Este servicio ya tiene turnos asociados: no se puede eliminar. "
+            "Desactivalo en su lugar."
+        )
+
+    await session.delete(service)
+    await session.commit()
+
+
 # --- Staff ---------------------------------------------------------------
 
 
@@ -194,6 +219,35 @@ async def set_staff_active(
     return profile
 
 
+async def delete_staff_permanently(
+    session: AsyncSession, salon_id: uuid.UUID, staff_id: uuid.UUID
+) -> None:
+    """Borrado real. Solo posible si el profesional nunca tuvo turnos (la FK
+    de `appointments` es `ON DELETE RESTRICT`); si tiene historial, se pide
+    desactivarlo en su lugar.
+
+    Se borra desde la Admin API de Supabase Auth (no con un DELETE directo a
+    `profiles`): borrar ahí cascadea al profile, staff_services, horarios y
+    ausencias, y además elimina la cuenta de auth.users para que no quede un
+    login fantasma sin profile.
+    """
+    profile = await load_staff_profile(session, salon_id, staff_id)
+
+    has_bookings = (
+        await session.scalar(
+            select(Appointment.id).where(Appointment.staff_id == staff_id).limit(1)
+        )
+    ) is not None
+    if has_bookings:
+        raise ConflictError(
+            "Este profesional ya tiene turnos asociados: no se puede eliminar. "
+            "Desactivalo en su lugar."
+        )
+
+    await supabase_admin.delete_user(profile.id)
+    session.expire(profile)
+
+
 async def set_staff_services(
     session: AsyncSession,
     salon_id: uuid.UUID,
@@ -230,41 +284,48 @@ async def set_staff_services(
 
 
 # --- Horarios laborales --------------------------------------------------
+# Por fecha puntual del calendario (no recurrente), ver StaffScheduleDate.
 
 
 async def get_staff_schedule(
-    session: AsyncSession, salon_id: uuid.UUID, staff_id: uuid.UUID
-) -> list[StaffSchedule]:
-    await load_staff_profile(session, salon_id, staff_id)
-    stmt = (
-        select(StaffSchedule)
-        .where(StaffSchedule.staff_id == staff_id)
-        .order_by(StaffSchedule.weekday, StaffSchedule.start_time)
-    )
-    return list((await session.scalars(stmt)).all())
-
-
-async def replace_staff_schedule(
     session: AsyncSession,
     salon_id: uuid.UUID,
     staff_id: uuid.UUID,
+    date_from: dt.date | None = None,
+    date_to: dt.date | None = None,
+) -> list[StaffScheduleDate]:
+    await load_staff_profile(session, salon_id, staff_id)
+    stmt = select(StaffScheduleDate).where(StaffScheduleDate.staff_id == staff_id)
+    if date_from is not None:
+        stmt = stmt.where(StaffScheduleDate.date >= date_from)
+    if date_to is not None:
+        stmt = stmt.where(StaffScheduleDate.date <= date_to)
+    stmt = stmt.order_by(StaffScheduleDate.date, StaffScheduleDate.start_time)
+    return list((await session.scalars(stmt)).all())
+
+
+async def replace_staff_schedule_date(
+    session: AsyncSession,
+    salon_id: uuid.UUID,
+    staff_id: uuid.UUID,
+    date: dt.date,
     blocks: list[ScheduleBlockIn],
-) -> list[StaffSchedule]:
-    """Reemplaza toda la semana de una vez: borra los bloques actuales e
-    inserta los nuevos en la misma transacción. Simplifica la operación
-    (sin diffing) a costa de exigirle al cliente mandar la semana completa
-    cada vez que edita un solo bloque.
+) -> list[StaffScheduleDate]:
+    """Reemplaza todos los bloques de una fecha puntual de una vez: borra los
+    bloques actuales de ese día e inserta los nuevos en la misma transacción.
     """
     await load_staff_profile(session, salon_id, staff_id)
 
     await session.execute(
-        delete(StaffSchedule).where(StaffSchedule.staff_id == staff_id)
+        delete(StaffScheduleDate).where(
+            StaffScheduleDate.staff_id == staff_id, StaffScheduleDate.date == date
+        )
     )
     rows = [
-        StaffSchedule(
+        StaffScheduleDate(
             salon_id=salon_id,
             staff_id=staff_id,
-            weekday=b.weekday,
+            date=date,
             start_time=b.start_time,
             end_time=b.end_time,
         )
@@ -276,13 +337,13 @@ async def replace_staff_schedule(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        if "staff_schedules_no_overlap" in str(getattr(exc, "orig", exc)):
+        if "staff_schedule_dates_no_overlap" in str(getattr(exc, "orig", exc)):
             raise ConflictError(
-                "Hay bloques de horario que se superponen el mismo día"
+                "Hay bloques de horario que se superponen ese día"
             ) from exc
         raise
 
-    return await get_staff_schedule(session, salon_id, staff_id)
+    return await get_staff_schedule(session, salon_id, staff_id, date_from=date, date_to=date)
 
 
 # --- Ausencias -------------------------------------------------------------
@@ -345,4 +406,58 @@ async def delete_time_off(
             "Ausencia inexistente en este salón", time_off_id=str(time_off_id)
         )
     await session.delete(time_off)
+    await session.commit()
+
+
+# --- Bloqueo de agenda (salón entero) -----------------------------------------
+
+
+async def list_salon_closures(
+    session: AsyncSession,
+    salon_id: uuid.UUID,
+    date_from: dt.datetime | None = None,
+    date_to: dt.datetime | None = None,
+) -> list[SalonClosure]:
+    stmt = select(SalonClosure).where(SalonClosure.salon_id == salon_id)
+    if date_from is not None:
+        stmt = stmt.where(SalonClosure.ends_at > date_from)
+    if date_to is not None:
+        stmt = stmt.where(SalonClosure.starts_at < date_to)
+    stmt = stmt.order_by(SalonClosure.starts_at)
+    return list((await session.scalars(stmt)).all())
+
+
+async def create_salon_closure(
+    session: AsyncSession,
+    salon_id: uuid.UUID,
+    starts_at: dt.datetime,
+    ends_at: dt.datetime,
+    reason: str | None,
+) -> SalonClosure:
+    closure = SalonClosure(
+        salon_id=salon_id, starts_at=starts_at, ends_at=ends_at, reason=reason
+    )
+    session.add(closure)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        if "salon_closures_no_overlap" in str(getattr(exc, "orig", exc)):
+            raise ConflictError(
+                "Ya existe un cierre de agenda que se superpone con este rango"
+            ) from exc
+        raise
+    await session.refresh(closure)
+    return closure
+
+
+async def delete_salon_closure(
+    session: AsyncSession, salon_id: uuid.UUID, closure_id: uuid.UUID
+) -> None:
+    closure = await session.get(SalonClosure, closure_id)
+    if closure is None or closure.salon_id != salon_id:
+        raise ResourceNotFound(
+            "Cierre de agenda inexistente en este salón", closure_id=str(closure_id)
+        )
+    await session.delete(closure)
     await session.commit()

@@ -7,6 +7,7 @@ import { AdminDashboard } from "./admin/AdminDashboard";
 import { AdminServices } from "./admin/AdminServices";
 import { AdminStaff } from "./admin/AdminStaff";
 import { AdminSchedule } from "./admin/AdminSchedule";
+import { AdminClosures } from "./admin/AdminClosures";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="services" element={<AdminServices />} />
             <Route path="staff" element={<AdminStaff />} />
             <Route path="staff/:staffId/schedule" element={<AdminSchedule />} />
+            <Route path="closures" element={<AdminClosures />} />
           </Route>
         </Routes>
       </ProfileProvider>

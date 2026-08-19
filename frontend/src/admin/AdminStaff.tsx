@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { apiGet, apiPatch, apiPost, apiPut, ApiError } from "../lib/api";
+import { apiGet, apiPatch, apiPost, apiPut, apiDelete, ApiError } from "../lib/api";
 import type { ApiService, ApiStaff, StaffInviteInput } from "../types/api";
 
 const EMPTY_INVITE: StaffInviteInput = { email: "", full_name: "", role: "staff" };
@@ -63,6 +63,26 @@ export function AdminStaff() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo actualizar el estado");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteForever(member: ApiStaff) {
+    if (
+      !window.confirm(
+        `¿Eliminar a "${member.full_name}" definitivamente? Pierde el acceso al panel y esta acción no se puede deshacer.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(member.id);
+    setError(null);
+    try {
+      await apiDelete(`/staff/${member.id}/permanent`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar el profesional");
     } finally {
       setBusyId(null);
     }
@@ -204,6 +224,14 @@ export function AdminStaff() {
                   className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
                 >
                   {member.is_active ? "Desactivar" : "Reactivar"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId === member.id}
+                  onClick={() => void deleteForever(member)}
+                  className="rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:border-red-400 disabled:opacity-50"
+                >
+                  Eliminar
                 </button>
               </div>
             </div>

@@ -115,15 +115,28 @@ export interface ServiceUpdateInput {
 
 export interface ApiScheduleBlock {
   id: string;
-  weekday: number;
+  date: string;
   start_time: string;
   end_time: string;
 }
 
 export interface ScheduleBlockInput {
-  weekday: number;
   start_time: string;
   end_time: string;
+}
+
+export interface ApiSalonClosure {
+  id: string;
+  salon_id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
+}
+
+export interface SalonClosureInput {
+  starts_at: string;
+  ends_at: string;
+  reason?: string | null;
 }
 
 export interface StaffInviteInput {

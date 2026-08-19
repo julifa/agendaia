@@ -91,7 +91,9 @@ def patched(monkeypatch):
             if state["windows"].get((sid, day))
         }
 
-    async def busy_intervals(session, staff_ids, window, exclude_appointment_id=None):
+    async def busy_intervals(
+        session, staff_ids, window, salon_id, exclude_appointment_id=None
+    ):
         return {sid: list(state["busy"].get(sid, [])) for sid in staff_ids}
 
     monkeypatch.setattr(availability, "load_salon", load_salon)

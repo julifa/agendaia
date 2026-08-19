@@ -32,8 +32,9 @@ from app.db.models import (
     Appointment,
     Profile,
     Salon,
+    SalonClosure,
     Service,
-    StaffSchedule,
+    StaffScheduleDate,
     StaffService,
     TimeOff,
 )
@@ -134,9 +135,9 @@ async def _working_windows(
         return {}
 
     rows = await session.scalars(
-        select(StaffSchedule).where(
-            StaffSchedule.staff_id.in_(staff_ids),
-            StaffSchedule.weekday == day.weekday(),
+        select(StaffScheduleDate).where(
+            StaffScheduleDate.staff_id.in_(staff_ids),
+            StaffScheduleDate.date == day,
         )
     )
 
@@ -157,9 +158,11 @@ async def busy_intervals(
     session: AsyncSession,
     staff_ids: list[uuid.UUID],
     window: Interval,
+    salon_id: uuid.UUID,
     exclude_appointment_id: uuid.UUID | None = None,
 ) -> dict[uuid.UUID, list[Interval]]:
-    """Turnos activos + ausencias que pisan `window`, por profesional."""
+    """Turnos activos + ausencias + cierres de agenda del salón que pisan
+    `window`, por profesional."""
     busy: dict[uuid.UUID, list[Interval]] = {sid: [] for sid in staff_ids}
     if not staff_ids:
         return busy
@@ -184,6 +187,19 @@ async def busy_intervals(
     )
     for off in await session.scalars(off_stmt):
         busy[off.staff_id].append(Interval(off.starts_at, off.ends_at))
+
+    # Cierre de agenda del salón entero (feriado, vacaciones): bloquea a
+    # todos los profesionales por igual, no hace falta cargarlo por staff.
+    closure_stmt = select(SalonClosure).where(
+        SalonClosure.salon_id == salon_id,
+        SalonClosure.starts_at < window.end,
+        SalonClosure.ends_at > window.start,
+    )
+    closures = [
+        Interval(c.starts_at, c.ends_at) for c in await session.scalars(closure_stmt)
+    ]
+    for sid in staff_ids:
+        busy[sid].extend(closures)
 
     for intervals in busy.values():
         intervals.sort(key=lambda i: i.start)
@@ -232,7 +248,7 @@ async def get_available_slots(
     day_end = day_start + dt.timedelta(days=1)
     query_window = Interval(day_start - dt.timedelta(hours=12), day_end)
 
-    busy = await busy_intervals(session, staff_ids, query_window)
+    busy = await busy_intervals(session, staff_ids, query_window, salon.id)
     bookable = _bookable_range(salon, now)
 
     duration = dt.timedelta(minutes=service.occupied_minutes)
@@ -318,7 +334,11 @@ async def assert_slot_bookable(
         )
 
     busy = await busy_intervals(
-        session, [staff_id], candidate, exclude_appointment_id=exclude_appointment_id
+        session,
+        [staff_id],
+        candidate,
+        salon.id,
+        exclude_appointment_id=exclude_appointment_id,
     )
     if any(candidate.overlaps(b) for b in busy[staff_id]):
         raise SlotTakenLocally(candidate, staff_id)
